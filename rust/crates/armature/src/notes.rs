@@ -59,6 +59,29 @@ const OWN_CRATE_JA: &str = "\nこれは素の Armature の checkout。利用者�
 const COPY_EN: &str = " This window runs from `{running}`, not from where the build lands (`{built}`): after building, copy it over with `ditto '{built}' '{running}'` so the button appears.";
 const COPY_JA: &str = " この窓は組んだ先(`{built}`)ではなく `{running}` から動いている。組み直したら `ditto '{built}' '{running}'` で上書きすると札が出る。";
 
+/// Where Armature's code lives, for a copy that was downloaded rather than built on this Mac.
+const REPOSITORY: &str = "https://github.com/ttobari/armature";
+
+/// How to change a downloaded copy: there is no code on this Mac, so start from the repository.
+const PREBUILT_EN: &str = "\
+## Changing this app
+
+This copy of Armature was downloaded ready-made, so its code is not on this Mac. When the user asks to add a panel or change how the window works, clone {repo} (or their own fork of it), read its `CLAUDE.md` — the map for adding or changing a panel — and prefer a crate of the user's own that depends on it. Build with `scripts/make-app.sh`; the user then opens the app it builds instead of this one, and from there you can change and rebuild it in place.
+";
+
+const PREBUILT_JA: &str = "\
+## この窓を作り替える
+
+この Armature は組み上がったものをダウンロードした版で、この Mac にコードは無い。パネルを足したい・窓の動きを変えたいと頼まれたら、{repo}(または利用者のフォーク)を clone し、そこの `CLAUDE.md`(パネルの足し方・直し方の地図)を読み、それに依存する利用者自身の crate を作るほうを勧める。`scripts/make-app.sh` で組み、利用者はこの版の代わりに組んだアプリを開く。そこから先は、その窓の中で直して組み直せる。
+";
+
+/// Whether this process runs from an app bundle (a downloaded copy, or a local build).
+fn in_bundle() -> bool {
+    std::env::current_exe()
+        .ok()
+        .is_some_and(|exe| exe.to_string_lossy().contains(".app/Contents/MacOS/"))
+}
+
 /// What `source.txt` in this app's bundle says, or `None` (a signed build, or run with cargo).
 fn built_from() -> Option<(std::collections::HashMap<String, String>, PathBuf)> {
     let exe = std::env::current_exe().ok()?;
@@ -118,7 +141,13 @@ pub fn write(panel_notes: &[String]) {
         text.push_str(note.trim_end());
         text.push('\n');
     }
-    if let Some(change) = built_from().and_then(|(fields, running)| change_part(&fields, &running)) {
+    let change = match built_from() {
+        Some((fields, running)) => change_part(&fields, &running),
+        // A signed, downloaded copy carries no paths from the Mac it was built on.
+        None if in_bundle() => Some(tr!(PREBUILT_EN, PREBUILT_JA).replace("{repo}", REPOSITORY)),
+        None => None,
+    };
+    if let Some(change) = change {
         text.push('\n');
         text.push_str(change.trim_end());
         text.push('\n');
@@ -175,6 +204,16 @@ mod tests {
         let text = change_part(&mine, std::path::Path::new("/Users/me/dev/my-armature/dist/My.app")).unwrap();
         assert!(!text.contains("crate of their own"));
         assert!(change_part(&fields(&[]), std::path::Path::new("/x")).is_none());
+    }
+
+    #[test]
+    fn a_downloaded_copy_points_claude_at_the_repository() {
+        for text in [PREBUILT_EN, PREBUILT_JA] {
+            let text = text.replace("{repo}", REPOSITORY);
+            assert!(text.contains("https://github.com/ttobari/armature"));
+            assert!(text.contains("CLAUDE.md"));
+            assert!(!text.contains("/Users/"), "no paths from the Mac it was built on");
+        }
     }
 
     #[test]
