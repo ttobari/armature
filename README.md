@@ -12,8 +12,9 @@ assistant and have it shape your own Claude Code workspace from here.
 
 ## What it is
 
-- **Claude Code in the center**, in full-screen mode. Open as many tabs as you like; they keep
-  running when you close the window (Armature brings its own tmux).
+- **Claude Code in the center**, in full-screen mode. `⌘T` starts a Claude session, `⌘J` a plain
+  terminal. Sessions keep running when you close the window (Armature brings its own tmux, inside
+  the app).
 - **Panels on the sides:** running sessions, browser tabs, clock, tasks — and a calendar and a
   music player you can turn on. Which panels show, and where, is one file: `~/Armature/panels.conf`.
 - **Tasks are Markdown files** in `~/Armature/tasks/`. Ask Claude to add one; select it and press
