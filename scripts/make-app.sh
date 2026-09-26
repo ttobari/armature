@@ -1,0 +1,202 @@
+#!/bin/sh
+# Builds the app bundle into dist/.
+#
+#   scripts/make-app.sh                 → dist/Armature.app (ad-hoc signature)
+#   SIGN_ID="Developer ID Application: …" scripts/make-app.sh
+#                                       → signed for distribution (hardened runtime)
+#
+# A build with panels of your own (a crate that depends on armature, see CLAUDE.md) uses the same
+# script, pointed at that crate:
+#
+#   MANIFEST=~/dev/my-armature/Cargo.toml PACKAGE=my-armature BINARY_NAME=my-armature \
+#   APP_NAME="My Armature" BUNDLE_ID=com.example.my-armature DIST=~/dev/my-armature/dist \
+#       ~/dev/armature/scripts/make-app.sh
+#
+# The name and the icon are yours to change: APP_NAME is the name in the Dock, the menu bar and
+# the window title; ICON is a 1024×1024 PNG, or an Icon Composer bundle (*.icon, macOS 26).
+#
+#   APP_NAME="Workbench" ICON=~/Pictures/workbench.png scripts/make-app.sh
+set -eu
+
+HERE=$(cd "$(dirname "$0")" && pwd)
+ROOT=$(cd "$HERE/.." && pwd)
+RUST="$ROOT/rust"
+CRATE="$RUST/crates/armature"
+
+APP_NAME="${APP_NAME:-Armature}"
+BUNDLE_ID="${BUNDLE_ID:-blog.tobari.armature}"
+PACKAGE="${PACKAGE:-armature}"
+BINARY_NAME="${BINARY_NAME:-armature}"
+MANIFEST="${MANIFEST:-$RUST/Cargo.toml}"
+TARGET_DIR="${TARGET_DIR:-$(dirname "$MANIFEST")/target}"
+VERSION="${VERSION:-$(sed -n 's/^version = "\(.*\)"/\1/p' "$RUST/Cargo.toml" | head -1)}"
+DIST="${DIST:-$ROOT/dist}"
+APP="$DIST/$APP_NAME.app"
+SIGN_ID="${SIGN_ID:--}"
+ICON="${ICON:-$RUST/crates/armature/assets/Cockpit.icon}"
+CARGO_BIN="${CARGO_BIN:-$HOME/.cargo/bin/cargo}"
+
+# 1. 本体を組む。最低 OS は 15.0。組んだ機体のパス(利用者名が入る)を実体に残さない。
+#    (rustc は後に書いた置き換えを優先する。ホーム全体を先に、細かいものを後に。)
+REMAP="--remap-path-prefix=$HOME=/home --remap-path-prefix=$HOME/.cargo/registry/src=/cargo --remap-path-prefix=$HOME/.rustup=/rustup --remap-path-prefix=$ROOT=/src"
+RUSTFLAGS="$REMAP" MACOSX_DEPLOYMENT_TARGET=15.0 LANG=ja_JP.UTF-8 "$CARGO_BIN" build --release \
+    --manifest-path "$MANIFEST" -p "$PACKAGE" --bin "$BINARY_NAME"
+BIN="$TARGET_DIR/release/$BINARY_NAME"
+BRIDGE="$TARGET_DIR/release/libCockpitTranslation.dylib"
+mkdir -p "$DIST"
+
+# 2. 同梱の tmux。Armature 本体の dist に組んだものがあれば使い回し、無ければ組む。
+TMUX_HELPER="$DIST/helpers/tmux"
+if [ ! -x "$TMUX_HELPER" ]; then
+    if [ -x "$ROOT/dist/helpers/tmux" ]; then
+        TMUX_HELPER="$ROOT/dist/helpers/tmux"
+    else
+        "$HERE/build-tmux.sh" "$DIST/helpers"
+    fi
+fi
+
+# 3. 束を組み直す(dist の中だけ。毎回まっさらから)。
+rm -rf "$APP"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Frameworks" "$APP/Contents/Helpers" \
+    "$APP/Contents/Resources/fonts" "$APP/Contents/Resources/licenses"
+cp "$BIN" "$APP/Contents/MacOS/$BINARY_NAME"
+# 組む途中の置き場を指す rpath を外す(束の中の Frameworks だけを見る)。
+otool -l "$APP/Contents/MacOS/$BINARY_NAME" | awk '/LC_RPATH/{getline; getline; print $2}' |
+    grep -v '^@' | while read -r stale; do
+        install_name_tool -delete_rpath "$stale" "$APP/Contents/MacOS/$BINARY_NAME"
+    done
+cp "$BRIDGE" "$APP/Contents/Frameworks/"
+cp "$TMUX_HELPER" "$APP/Contents/Helpers/tmux"
+
+# 4. 書体(どれも SIL OFL 1.1)。dist/fonts → 組む機体の書体の順に探し、無ければ公式の配布から取り寄せる。
+FONTS="MoralerspaceArgon-Regular.ttf MoralerspaceArgon-Bold.ttf MoralerspaceArgon-Italic.ttf MoralerspaceArgon-BoldItalic.ttf JetBrainsMonoNerdFontMono-Regular.ttf"
+find_font() {
+    for dir in "$DIST/fonts" "$ROOT/dist/fonts" "$HOME/Library/Fonts" "/Library/Fonts"; do
+        if [ -f "$dir/$1" ]; then echo "$dir/$1"; return 0; fi
+    done
+    return 1
+}
+for font in $FONTS; do
+    find_font "$font" >/dev/null || { "$HERE/fetch-fonts.sh" >/dev/null; break; }
+done
+for font in $FONTS; do
+    found=$(find_font "$font") || { echo "書体が無い: $font" >&2; exit 1; }
+    cp "$found" "$APP/Contents/Resources/fonts/"
+done
+
+# 4.5 初回に開く「はじめに」の頁。
+cp "$CRATE/assets/welcome.html" "$APP/Contents/Resources/welcome.html"
+cp "$CRATE/assets/welcome-ja.html" "$APP/Contents/Resources/welcome-ja.html"
+
+# 5. 第三者の許諾文。
+cp "$ROOT/licenses/"* "$APP/Contents/Resources/licenses/" 2>/dev/null || true
+
+# 6. アイコン(新形式 .icon → Assets.car。PNG を渡されたか actool が無ければ PNG から icns)。
+ICON_PLIST=""
+ICON_PNG="$CRATE/assets/cockpit-icon.png"
+case "$ICON" in
+    *.icon) ICON_BUNDLE="${ICON%/}" ;;
+    *) ICON_BUNDLE=""; ICON_PNG="$ICON" ;;
+esac
+if [ -n "$ICON_BUNDLE" ] && [ -d "$ICON_BUNDLE" ] && xcrun --find actool >/dev/null 2>&1; then
+    ICON_ASSET=$(basename "$ICON_BUNDLE" .icon)
+    ICON_OUT="${TMPDIR:-/tmp}"
+    ICON_OUT="${ICON_OUT%/}/armature-icon.out"
+    rm -rf "$ICON_OUT" && mkdir -p "$ICON_OUT"
+    xcrun actool "$ICON_BUNDLE" --compile "$ICON_OUT" --platform macosx \
+        --minimum-deployment-target 15.0 --app-icon "$ICON_ASSET" \
+        --output-partial-info-plist "$ICON_OUT/partial.plist" >/dev/null
+    cp "$ICON_OUT/Assets.car" "$APP/Contents/Resources/Assets.car"
+    cp "$ICON_OUT/$ICON_ASSET.icns" "$APP/Contents/Resources/cockpit.icns"
+    ICON_PLIST="<key>CFBundleIconName</key><string>$ICON_ASSET</string>"
+else
+    ICONSET="${TMPDIR:-/tmp}"
+    ICONSET="${ICONSET%/}/armature.iconset"
+    rm -rf "$ICONSET" && mkdir -p "$ICONSET"
+    for size in 16 32 128 256 512; do
+        sips -z $size $size "$ICON_PNG" --out "$ICONSET/icon_${size}x${size}.png" >/dev/null
+        sips -z $((size * 2)) $((size * 2)) "$ICON_PNG" --out "$ICONSET/icon_${size}x${size}@2x.png" >/dev/null
+    done
+    iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/cockpit.icns"
+fi
+
+# 7. Info.plist。カメラ・マイクの説明は WebKit が mediaDevices を生やす条件。
+cat > "$APP/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key><string>$APP_NAME</string>
+    <key>CFBundleDisplayName</key><string>$APP_NAME</string>
+    <key>CFBundleExecutable</key><string>$BINARY_NAME</string>
+    <key>CFBundleIdentifier</key><string>$BUNDLE_ID</string>
+    <key>CFBundleIconFile</key><string>cockpit</string>
+    $ICON_PLIST
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleShortVersionString</key><string>$VERSION</string>
+    <key>CFBundleVersion</key><string>1</string>
+    <key>LSMinimumSystemVersion</key><string>15.0</string>
+    <key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>
+    <key>NSHighResolutionCapable</key><true/>
+    <key>CFBundleDevelopmentRegion</key><string>en</string>
+    <key>CFBundleLocalizations</key><array><string>en</string><string>ja</string></array>
+    <key>NSAppleEventsUsageDescription</key><string>Used by the music panel (Apple Music) and when Claude Code controls an app you allow.</string>
+    <key>NSDesktopFolderUsageDescription</key><string>Used when Claude Code works with files you ask it to.</string>
+    <key>NSDocumentsFolderUsageDescription</key><string>Used when Claude Code works with files you ask it to.</string>
+    <key>NSDownloadsFolderUsageDescription</key><string>Used when Claude Code works with files you ask it to.</string>
+    <key>NSCameraUsageDescription</key><string>Used by web pages for video calls.</string>
+    <key>NSMicrophoneUsageDescription</key><string>Used by web pages for calls.</string>
+</dict>
+</plist>
+PLIST
+# 許可を求める窓の説明文。既定は上の英語、日本語の Mac では ja.lproj の文が出る。
+mkdir -p "$APP/Contents/Resources/ja.lproj"
+cat > "$APP/Contents/Resources/ja.lproj/InfoPlist.strings" <<'STRINGS'
+"NSAppleEventsUsageDescription" = "音楽のパネル(Apple Music)と、Claude Code が許可されたアプリを操作するときに使います。";
+"NSDesktopFolderUsageDescription" = "Claude Code が依頼されたファイルを扱うときに使います。";
+"NSDocumentsFolderUsageDescription" = "Claude Code が依頼されたファイルを扱うときに使います。";
+"NSDownloadsFolderUsageDescription" = "Claude Code が依頼されたファイルを扱うときに使います。";
+"NSCameraUsageDescription" = "Web ページのビデオ通話でカメラを使います。";
+"NSMicrophoneUsageDescription" = "Web ページの通話でマイクを使います。";
+STRINGS
+/usr/bin/plutil -lint "$APP/Contents/Resources/ja.lproj/InfoPlist.strings" >/dev/null
+/usr/bin/plutil -lint "$APP/Contents/Info.plist" >/dev/null
+printf 'APPL????' > "$APP/Contents/PkgInfo"
+
+# 7b. ソースの在り処と組み直しの命令。窓の中の Claude がこの窓を作り替えられるように
+#     (`src/notes.rs` が読んで約束の文に書き足す)。**配布用の束には書かない**——組んだ
+#     機体のパス(利用者名が入る)を外へ出さない。
+if [ "$SIGN_ID" = "-" ]; then
+    quote() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
+    SOURCE_DIR=$(cd "$(dirname "$MANIFEST")" && pwd)
+    DIST_DIR=$(cd "$DIST" && pwd)
+    {
+        printf 'source=%s\n' "$SOURCE_DIR"
+        printf 'repo=%s\n' "$ROOT"
+        printf 'app=%s\n' "$DIST_DIR/$APP_NAME.app"
+        printf 'build=MANIFEST=%s PACKAGE=%s BINARY_NAME=%s APP_NAME=%s BUNDLE_ID=%s DIST=%s ICON=%s %s\n' \
+            "$(quote "$MANIFEST")" "$(quote "$PACKAGE")" "$(quote "$BINARY_NAME")" \
+            "$(quote "$APP_NAME")" "$(quote "$BUNDLE_ID")" "$(quote "$DIST")" "$(quote "$ICON")" \
+            "$(quote "$ROOT/scripts/make-app.sh")"
+    } > "$APP/Contents/Resources/source.txt"
+fi
+
+# 8. 署名。中身から外へ。配布用(Developer ID)のときは hardened runtime と時刻印を付ける。
+sign() {
+    if [ "$SIGN_ID" = "-" ]; then
+        codesign --force --sign - "$@"
+    else
+        codesign --force --timestamp --options runtime --sign "$SIGN_ID" "$@"
+    fi
+}
+sign "$APP/Contents/Frameworks/libCockpitTranslation.dylib"
+sign "$APP/Contents/Helpers/tmux"
+if [ "$SIGN_ID" = "-" ]; then
+    sign --identifier "$BUNDLE_ID" "$APP"
+else
+    # 配布用は hardened runtime なので、Music の操作・カメラ・マイクの権利を明示する。
+    sign --entitlements "$HERE/entitlements.plist" --identifier "$BUNDLE_ID" "$APP"
+fi
+codesign --verify --strict "$APP"
+
+echo "$APP"

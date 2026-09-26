@@ -1,0 +1,77 @@
+[package]
+name = "armature"
+version.workspace = true
+edition.workspace = true
+rust-version = "1.92"
+
+# The app is the library; the binary only runs it. A build with panels of your own depends on
+# this crate and has its own `main` (see CLAUDE.md).
+[lib]
+name = "armature"
+path = "src/lib.rs"
+
+[[bin]]
+name = "armature"
+path = "src/main.rs"
+
+[dependencies]
+# 画面は全面的に Iced で組む。tokio は時刻購読とブロッキング取得の退避に使う。
+# 既定の features から macOS で要るものだけを明示する。
+# crisp と web-colors は既定に含まれる見た目の設定なので、落とすと色と輪郭が変わる。
+iced = { version = "0.14.0", default-features = false, features = [
+    "wgpu",
+    "crisp",
+    "web-colors",
+    "thread-pool",
+    "advanced",
+    # 音楽のパネルのアートワークを出す。画像パイプラインは iced 側の feature でしか生えない。
+    "image",
+    # 印は Lucide の線画をそのまま描く。
+    # Unicode の記号は書体任せで輪郭が揃わないので捨てた。
+    "svg",
+    "tokio",
+] }
+iced_term = { path = "vendor/iced_term" }
+tokio = { version = "1.50", features = ["rt", "sync", "time"] }
+# ブラウザの伝言の見張り(lib.rs::browser_request_watch)の stream と Sink。
+futures = "0.3"
+jiff.workspace = true
+serde_json.workspace = true
+# ⌘⇧T で戻す会話の model と effort を、会話ログの後ろから探す(resume.rs)。
+memchr = "2"
+wry = "0.56"
+objc2 = "0.6"
+block2 = "0.6"
+objc2-app-kit = { version = "0.3", features = [
+    "block2",
+    "NSApplication",
+    "NSEvent",
+    "NSMenu",
+    "NSMenuItem",
+    "NSOpenPanel",
+    "NSPanel",
+    "NSResponder",
+    "NSSavePanel",
+    "NSView",
+    "NSWindow",
+] }
+objc2-foundation = { version = "0.3", features = ["NSArray", "NSGeometry", "NSLocale", "NSString", "NSURL", "NSURLRequest"] }
+# ブラウザの伝言の受け口(browser.rs の IpcReceiver)。送り主の枠が主フレームかを WebKit に訊く。
+objc2-web-kit = { version = "0.3", default-features = false, features = [
+    "std",
+    "objc2-app-kit",
+    "WKFrameInfo",
+    "WKScriptMessage",
+    "WKScriptMessageHandler",
+    "WKUserContentController",
+    "WKWebView",
+    "WKWebViewConfiguration",
+] }
+# ブラウザの面を前後に並べ、角を丸めるために CALayer を直に触る(browser.rs)。
+# 以前は iced の既定 features 経由で暗黙に有効になっていた——依存を明示に直した。
+objc2-quartz-core = { version = "0.3", features = ["CALayer"] }
+
+# Loads the translation bridge after launch (`dlopen`, see apple_translation.rs).
+libc.workspace = true
+# 下の層(セッションの名簿・タスクの読み書き・暦)。
+armature-core = { path = "../armature-core" }

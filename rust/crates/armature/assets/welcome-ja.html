@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>はじめに — Armature</title>
+<style>
+  :root {
+    --crust: #232634; --mantle: #292c3c; --base: #303446; --surface: #414559;
+    --text: #c6d0f5; --sub: #a5adce; --faint: #737994;
+    --blue: #8caaee; --green: #a6d189; --yellow: #e5c890; --peach: #ef9f76;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--crust); color: var(--text);
+    font: 15px/1.75 -apple-system, "Hiragino Sans", "Hiragino Kaku Gothic ProN", sans-serif;
+  }
+  main { max-width: 760px; margin: 0 auto; padding: 56px 32px 80px; }
+  h1 { font-size: 30px; font-weight: 600; margin: 0 0 6px; letter-spacing: .02em; }
+  .lead { color: var(--sub); margin: 0 0 40px; }
+  h2 { font-size: 17px; font-weight: 600; margin: 40px 0 12px; color: var(--text); }
+  h2 .n { color: var(--faint); font-weight: 400; margin-right: 8px; }
+  p { margin: 8px 0; }
+  .layout { display: grid; grid-template-columns: 1fr 2.4fr 1fr; gap: 8px; margin: 14px 0 6px; }
+  .layout div { background: var(--base); border-radius: 8px; padding: 14px 12px; min-height: 120px; font-size: 13px; }
+  .layout b { display: block; color: var(--blue); font-weight: 600; margin-bottom: 4px; }
+  ol.flow { counter-reset: s; list-style: none; padding: 0; margin: 12px 0; }
+  ol.flow li { position: relative; padding: 8px 0 8px 36px; border-bottom: 1px solid var(--surface); }
+  ol.flow li::before {
+    counter-increment: s; content: counter(s); position: absolute; left: 0; top: 8px;
+    width: 24px; height: 24px; border-radius: 50%; background: var(--surface);
+    color: var(--green); font-size: 12px; text-align: center; line-height: 24px;
+  }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 14px; }
+  td { padding: 7px 8px; border-bottom: 1px solid var(--surface); vertical-align: top; }
+  td:first-child { width: 150px; white-space: nowrap; }
+  kbd {
+    display: inline-block; min-width: 22px; padding: 1px 7px; border-radius: 5px;
+    background: var(--base); border: 1px solid var(--surface); color: var(--yellow);
+    font: 13px/1.6 "SF Mono", Menlo, monospace; text-align: center;
+  }
+  code { font: 13px "SF Mono", Menlo, monospace; color: var(--peach); }
+  .note { background: var(--mantle); border-left: 3px solid var(--blue); border-radius: 6px; padding: 12px 16px; margin: 14px 0; color: var(--sub); }
+  .foot { margin-top: 48px; color: var(--faint); font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>ようこそ</h1>
+  <p class="lead">Claude Code をタスクから起こして回すための、まっさらな机です。<br>
+  ここから自分の道具を足していく前提で作ってあります。</p>
+
+  <h2><span class="n">1</span>画面の見方</h2>
+  <div class="layout">
+    <div><b>左</b>ブラウザのタブ<br>動いているセッション</div>
+    <div><b>中央</b>Claude Code の端末。タブで何本でも並べられて、窓を閉じても会話は生きています。</div>
+    <div><b>右</b>時計<br>タスク</div>
+  </div>
+  <p>左右のパネルは、出す・外す・入れ替えが自由です。Claude に「時計を左の列へ」と頼めば並べ替わります。</p>
+
+  <h2><span class="n">2</span>最初の一回だけ</h2>
+  <p>中央の Claude Code が「このフォルダを信頼するか」を聞いてきます。<code>Yes, I trust this folder</code> を選んでください。フォルダはこのアプリの置き場(<code>~/Armature</code>)で、次からは聞かれません。</p>
+  <div class="note">Claude Code を使うには Claude の Pro / Max などの契約が要ります。初めて使うときは、ブラウザでログインの画面が開きます。</div>
+
+  <h2><span class="n">3</span>タスクで回す</h2>
+  <ol class="flow">
+    <li>中央の Claude に「〇〇をタスクに足して」と頼みます。一覧に 1 件増えます。</li>
+    <li>一覧で選んで <kbd>⌃L</kbd>。そのタスク用の Claude が中央に立ち上がります。</li>
+    <li>Claude はタスクのファイルを読んで始め、区切りのいいところで「現在地」と「次にやること」を書き戻します。「保存」と言えばすぐに書きます。</li>
+    <li>次にそのタスクを起こすと、書き戻したところから続きます。</li>
+    <li>終わったら一覧で <kbd>d</kbd> を2回。完了になります。</li>
+  </ol>
+  <p>タスクは <code>~/Armature/tasks/</code> に1件1枚の Markdown で置かれます。ふつうのファイルなので、好きなエディタで直せます。</p>
+
+  <h2><span class="n">4</span>よく使うキー</h2>
+  <table>
+    <tr><td><kbd>⌘T</kbd></td><td>新しい Claude のタブ</td></tr>
+    <tr><td><kbd>⌘J</kbd></td><td>新しいシェル</td></tr>
+    <tr><td><kbd>⌘W</kbd></td><td>いまのタブを閉じる</td></tr>
+    <tr><td><kbd>⌃Tab</kbd></td><td>次のタブへ</td></tr>
+    <tr><td><kbd>⌘B</kbd></td><td>ブラウザと端末を切り替える(外国語の頁は <kbd>T</kbd> で日本語に)</td></tr>
+    <tr><td><kbd>⌘R</kbd></td><td>タスクの一覧へ(頁を見ている間は頁の読み直しになるので、先に <kbd>⌘B</kbd>)</td></tr>
+    <tr><td><kbd>⌘,</kbd></td><td>設定(言語・配色)</td></tr>
+    <tr><td><kbd>⌘/</kbd></td><td>キーの一覧(このほかにもあります)</td></tr>
+  </table>
+
+  <h2><span class="n">5</span>自分の机にする</h2>
+  <p>パネルは差し替えも取り外しも自由で、Claude に作ってもらうこともできます。パネルの並びは <code>~/Armature/panels.conf</code> 1枚に書いてあり、手で直しても、Claude に「時計を左の列へ」と頼んでも変えられます。</p>
+  <p>天気、ノート、フィード、Git の差分——欲しいパネルは、ソースを手元に置いて Claude Code に「パネルを足して」と頼めば作れるように書いてあります。</p>
+
+  <p class="foot">この頁は <kbd>⌘W</kbd> で閉じられます。<kbd>⌘B</kbd> で端末に戻ります。</p>
+</main>
+</body>
+</html>
