@@ -17,7 +17,7 @@ use iced::{Alignment, Background, Border, Length, Subscription, Task};
 
 use crate::palette::{
     self, accent_active, accent_attention, accent_focus, surface_raised, text_faint, text_muted,
-    text_primary,
+    text_primary, text_secondary,
 };
 use crate::{Element, Host, Notice, Panel, Tab, ellipsized, font, glow, tr};
 
@@ -533,11 +533,6 @@ fn session_view(
     draggable: bool,
 ) -> Element<'_, Message> {
     let liveness = liveness(session);
-    let (mark, color) = match liveness {
-        Liveness::Working => (spinner_mark(animation_phase), accent_active()),
-        Liveness::Unread => ("●", accent_attention()),
-        Liveness::Read => ("○", text_faint()),
-    };
     let metadata = agent_metadata(
         session.model.as_deref(),
         session.effort.as_deref(),
@@ -545,18 +540,18 @@ fn session_view(
         columns,
     );
     // 前面のタブの行は面で塗らない。題を太字にして光らせる(タスク一覧の選んでいる行と同じ)。
-    let title_ink = session_title_color(session, liveness, seen);
     let title: Element<'_, Message> = if active {
         glow::glow(
             move |ink| ellipsized::styled(&session.title, 13.0, ink, font::UI_STRONG),
-            title_ink,
+            palette::text_lit(),
             SESSION_TITLE_GLOW,
         )
     } else {
-        ellipsized::styled(&session.title, 13.0, title_ink, font::UI)
+        let ink = session_title_color(liveness, seen, animation_phase);
+        ellipsized::styled(&session.title, 13.0, ink, font::UI)
     };
     let head = row![
-        session_mark(mark, color),
+        session_lamp(lamp_state(session, liveness, seen), animation_phase),
         container(title).width(Length::Fill).clip(true),
         container(metadata).width(Length::Shrink),
         Space::new().width(session_row_tail(SESSION_ROW_SPACING)),
@@ -574,10 +569,11 @@ fn session_view(
                 agent_mark(agent.idle_sec, animation_phase),
                 agent_mark_color(agent.idle_sec)
             ),
-            container(ellipsized::text(
+            container(ellipsized::styled(
                 &agent.name,
                 12.0,
-                agent_title_color(agent.idle_sec)
+                agent_title_color(agent.idle_sec),
+                font::UI,
             ))
             .width(Length::Fill)
             .clip(true),
@@ -726,7 +722,9 @@ fn agent_metadata<'a>(
         metadata = metadata.push(cell(
             name.to_string(),
             columns.model,
-            palette::model(name),
+            // モデルと思考量は色を付けない。行の意味色(緑・黄)は灯りと題が持つので、
+            // ここまで塗ると行の中に色が散って、どれが生死の色か読めなくなる。
+            text_muted(),
             ALIGN,
         ));
     }
@@ -735,7 +733,7 @@ fn agent_metadata<'a>(
         metadata = metadata.push(cell(
             name.to_string(),
             columns.effort,
-            palette::effort(name),
+            text_muted(),
             ALIGN,
         ));
     }
@@ -840,16 +838,70 @@ fn agent_is_quiet(idle_sec: f64) -> bool {
 /// ——見たパネルはグレーへ落とし、まだ見ていない「対応待ち」だけを黄で立たせる。
 /// 既読を対応待ちより先に見るのは、`✳` が利用者の入力まで消えない印で、優先を逆に
 /// すると見終えたパネルまで黄のまま居座るため。
-fn session_title_color(session: &SessionRow, liveness: Liveness, seen: bool) -> iced::Color {
+/// 前面でない行の題の色。**動いている題は緑で息をする**——行頭の灯り(5px)だけでは、
+/// 配色によって動いている緑と返事待ちの黄が見分けにくい。見終えた行は沈め、ほかは本文より
+/// 1段落とす(前面の題だけが光って浮くように)。返事待ちは題ではなく灯りの黄で言う。
+fn session_title_color(liveness: Liveness, seen: bool, phase: u8) -> iced::Color {
     if liveness == Liveness::Working {
-        accent_active()
+        palette::mix(accent_active(), text_primary(), 0.4 * (1.0 - lamp_breath(phase)))
     } else if seen {
         text_faint()
-    } else if session.awaiting {
-        accent_attention()
     } else {
-        text_primary()
+        text_secondary()
     }
+}
+
+/// 灯りの状態。**返事が出揃って、まだ見ていない行は黄**——待っているのは利用者の番。
+/// 見た(前面にした)ら消える。
+fn lamp_state(session: &SessionRow, liveness: Liveness, seen: bool) -> Liveness {
+    match liveness {
+        Liveness::Working | Liveness::Unread => liveness,
+        Liveness::Read if session.awaiting && !seen => Liveness::Unread,
+        Liveness::Read => Liveness::Read,
+    }
+}
+
+/// 行頭の灯りの直径。印の桝([`session_tree::MARK_BOX`])の中央に置く——枝の縦線は桝の
+/// 中央を通るので、灯りも同じ桁に立たないと線から外れる。
+const LAMP: f32 = 5.0;
+
+/// 行頭の灯り。計器の表示灯のような小さな丸: 動いている行は緑でゆっくり息をし、
+/// 返事を待っている行は黄で灯ったまま、見た行は消えた灯り。
+fn session_lamp<'a>(liveness: Liveness, phase: u8) -> Element<'a, Message> {
+    let (color, glow) = match liveness {
+        Liveness::Working => (accent_active(), lamp_breath(phase)),
+        Liveness::Unread => (accent_attention(), 0.75),
+        Liveness::Read => (palette::with_alpha(text_faint(), 0.7), 0.0),
+    };
+    // 息の浅いところでも消えきらない。**消えると「止まった」に見える**。
+    let core = if glow > 0.0 {
+        palette::mix(palette::mix(color, iced::Color::BLACK, 0.45), color, 0.35 + 0.65 * glow)
+    } else {
+        color
+    };
+    let dot = container(Space::new().width(Length::Fixed(LAMP)).height(Length::Fixed(LAMP)))
+        .style(move |_| container::Style {
+            background: Some(Background::Color(core)),
+            border: Border {
+                radius: (LAMP / 2.0).into(),
+                ..Border::default()
+            },
+            shadow: iced::Shadow {
+                color: palette::with_alpha(color, 0.7 * glow),
+                offset: iced::Vector::ZERO,
+                blur_radius: 2.0 + 6.0 * glow,
+            },
+            ..container::Style::default()
+        });
+    container(dot)
+        .center_x(Length::Fixed(session_tree::MARK_BOX))
+        .into()
+}
+
+/// 動いている行の灯りの息(0.35〜1.0)。**8秒で1往復**——速く瞬くと字を読む目を引っぱる。
+fn lamp_breath(phase: u8) -> f32 {
+    let turn = f32::from(phase % 64) / 64.0 * std::f32::consts::TAU;
+    0.35 + 0.65 * (1.0 - turn.cos()) * 0.5
 }
 
 /// 木の枝(サブエージェント)の名の色。
@@ -1185,28 +1237,28 @@ mod tests {
         };
         let running = |active| tab("d:1", "⠋ 走っている", true, active);
         let stopped = |active| tab("d:2", "✳ 返事が出揃った", false, active);
-        let color =
+        let lamp =
             |rows: &[SessionRow], seen: &std::collections::HashSet<String>, index: usize| {
                 let row = &rows[index];
-                session_title_color(row, liveness(row), seen.contains(&row.target))
+                lamp_state(row, liveness(row), seen.contains(&row.target))
             };
 
         let mut rows = vec![bare_row(running(true)), bare_row(stopped(false))];
         let mut seen = std::collections::HashSet::new();
         track_seen(&mut seen, &rows);
-        assert_eq!(color(&rows, &seen, 0), accent_active(), "実行中は緑");
-        assert_eq!(color(&rows, &seen, 1), accent_attention(), "止まっていて未確認は黄");
+        assert_eq!(lamp(&rows, &seen, 0), Liveness::Working, "実行中は緑");
+        assert_eq!(lamp(&rows, &seen, 1), Liveness::Unread, "止まっていて未確認は黄");
 
         // 利用者が止まっているパネルへ切り替えた=見た。
         reconcile_tabs(&mut rows, &[running(false), stopped(true)]);
         track_seen(&mut seen, &rows);
-        assert_eq!(color(&rows, &seen, 1), text_faint(), "既読はグレー");
+        assert_eq!(lamp(&rows, &seen, 1), Liveness::Read, "既読は消えた灯り");
 
         // 返事を入れて再び動き出すと既読は外れ、次に止まればまた黄へ戻る。
         rows[1].status = SessionStatus::Working;
         track_seen(&mut seen, &rows);
         rows[1].status = SessionStatus::Read;
-        assert_eq!(color(&rows, &seen, 1), accent_attention());
+        assert_eq!(lamp(&rows, &seen, 1), Liveness::Unread);
 
         // 閉じたタブは覚えたままにしない。
         reconcile_tabs(&mut rows, &[running(true)]);
@@ -1304,11 +1356,8 @@ mod tests {
             ..blank_row()
         };
         assert_eq!(liveness(&delegated), Liveness::Read, "親は止まっている扱い");
-        // 親の題も灰のまま。動いているのは配下で、親は指示待ち。
-        assert_eq!(
-            session_title_color(&delegated, Liveness::Read, true),
-            text_faint()
-        );
+        // 親の題も沈んだまま。動いているのは配下で、親は指示待ち。
+        assert_eq!(session_title_color(Liveness::Read, true, 0), text_faint());
         // 枝の行だけが緑を持つ。
         assert_eq!(agent_title_color(1.0), accent_active());
         assert_eq!(agent_mark_color(1.0), accent_active());
