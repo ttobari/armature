@@ -32,6 +32,8 @@ path = "src/lib.rs"
 
 [dependencies.alacritty_terminal]
 version = "0.25.1"
+# 既定の "serde" は設定の読み書き用で、ここでは使わない(serde_derive ごと組まずに済む)。
+default-features = false
 
 [dependencies.anyhow]
 version = "1.0.102"
@@ -58,9 +60,7 @@ version = "0.14.0"
 version = "0.14.0"
 default-features = false
 
-[dependencies.open]
-version = "5.3.3"
-
 [dependencies.tokio]
 version = "1.50.0"
-features = ["full"]
+# 使うのは mpsc・Mutex・sleep_until・select! だけ。"full" は網・プロセス・シグナルまで組む。
+features = ["macros", "sync", "time"]

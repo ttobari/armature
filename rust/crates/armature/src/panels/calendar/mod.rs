@@ -804,7 +804,7 @@ mod tests {
             calendar_mark_color(calendar::MarkColor::Mauve),
             palette::mauve()
         );
-        assert_ne!(palette::mauve(), palette::MOCHA_SONNET);
+        assert_ne!(palette::mauve(), iced::Color::from_rgb8(0xf5, 0xc2, 0xe7));
     }
 
     #[test]

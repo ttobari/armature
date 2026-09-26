@@ -57,7 +57,7 @@ const FILES: [&str; 4] = [
 ];
 
 /// 画面全体の拡大率の既定。
-pub const DEFAULT_SCALE: f32 = 1.0;
+pub const DEFAULT_SCALE: f32 = 1.3;
 /// これ以上縮めるとパネルの見出しと罫線が潰れて読めなくなる。
 pub const MIN_SCALE: f32 = 0.7;
 /// これ以上広げると左右のパネルに一行も収まらなくなる。

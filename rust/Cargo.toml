@@ -5,6 +5,11 @@ resolver = "3"
 members = ["crates/armature-core", "crates/armature"]
 # vendor は差し替えた複製(iced_term)で、ワークスペースの一員ではない。
 exclude = ["vendor"]
+# Cargo.lock は idna_adapter を 1.1.0 に止めてある(`cargo update -p idna_adapter --precise 1.1.0`)。
+# wry が引く url の国際化ドメイン名(IDNA)を ICU4X でなく unicode-rs で処理させ、ICU4X の 20 余りの
+# crate を組まずに済ませる(idna_adapter の README の選び方)。依存として書くと Armature を依存に取る
+# crate の解決を縛るので、このワークスペースの Cargo.lock だけで選ぶ。`cargo update` のあとは同じ命令で
+# 戻す。macOS の wry が url を使うのは cookies_for_url だけで、Armature は呼ばない。
 
 [workspace.dependencies]
 jiff = "0.2"
@@ -13,7 +18,7 @@ serde_json = "1.0"
 regex = "1"
 
 [workspace.package]
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/ttobari/armature"

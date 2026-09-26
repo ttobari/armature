@@ -26,12 +26,16 @@ if [ -n "${TMPDIR:-}" ]; then
 else
     WORK=$(mktemp -d /tmp/armature-tmux.XXXXXX)
 fi
-# 組んだ libevent と utf8proc は版ごとの置き場に置く。版を上げると組み直す。
-PREFIX=$WORK/prefix-libevent-$LIBEVENT_VERSION-utf8proc-$UTF8PROC_VERSION
+# 組んだ libevent と utf8proc は版と組み方ごとの置き場に置く。版か RECIPE を上げると組み直す。
+# RECIPE は下の configure の旗を変えたら上げる(前の組み方の物を使い回さないため)。
+RECIPE=2
+PREFIX=$WORK/prefix-libevent-$LIBEVENT_VERSION-utf8proc-$UTF8PROC_VERSION-r$RECIPE
 JOBS=$(sysctl -n hw.ncpu)
 
 export MACOSX_DEPLOYMENT_TARGET=15.0
-export CFLAGS="-O2 -mmacosx-version-min=15.0 -I$PREFIX/include"
+# 最低 OS より後に入った関数を、確かめずに呼ぶ所があれば組むのを止める。組む機体の SDK が新しいと、
+# そうした関数は弱リンクになり、古い macOS では NULL を呼んで落ちる。
+export CFLAGS="-O2 -mmacosx-version-min=15.0 -Werror=unguarded-availability-new -I$PREFIX/include"
 export LDFLAGS="-mmacosx-version-min=15.0 -L$PREFIX/lib"
 export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig"
 
@@ -51,6 +55,10 @@ fetch() {
     }
 }
 
+# configure は関数の有無をリンクできるかで見るので、SDK にあれば最低 OS に無くても「有る」と判断する。
+# 最低 OS 15.0 より後に入った関数は無いものとして組ませる(pipe2 は macOS 27 から)。
+NEWER_THAN_15="ac_cv_func_pipe2=no"
+
 LIBEVENT_TAR=libevent-$LIBEVENT_VERSION.tar.gz
 UTF8PROC_TAR=utf8proc-$UTF8PROC_VERSION.tar.gz
 TMUX_TAR=tmux-$TMUX_VERSION.tar.gz
@@ -63,7 +71,8 @@ if [ ! -f "$PREFIX/lib/libevent_core.a" ]; then
     tar xzf "$LIBEVENT_TAR"
     (cd "libevent-$LIBEVENT_VERSION" &&
         ./configure --prefix="$PREFIX" --disable-shared --enable-static \
-            --disable-openssl --disable-samples --disable-libevent-regress >/dev/null &&
+            --disable-openssl --disable-samples --disable-libevent-regress \
+            $NEWER_THAN_15 >/dev/null &&
         make -j"$JOBS" >/dev/null &&
         make install >/dev/null)
 fi
@@ -81,7 +90,7 @@ fi
 rm -rf "tmux-$TMUX_VERSION"
 tar xzf "$TMUX_TAR"
 (cd "tmux-$TMUX_VERSION" &&
-    ./configure --prefix="$PREFIX" --enable-utf8proc --disable-jemalloc \
+    ./configure --prefix="$PREFIX" --enable-utf8proc --disable-jemalloc $NEWER_THAN_15 \
         LIBEVENT_CORE_CFLAGS="-I$PREFIX/include" \
         LIBEVENT_CORE_LIBS="$PREFIX/lib/libevent_core.a" \
         LIBEVENT_CFLAGS="-I$PREFIX/include" \
@@ -90,6 +99,8 @@ tar xzf "$TMUX_TAR"
         LIBUTF8PROC_LIBS="$PREFIX/lib/libutf8proc.a" >/dev/null &&
     make -j"$JOBS" >/dev/null)
 
+# 最低 OS に無い関数を弱リンクで呼んでいないこと(出力先へ写す前に。落ちる物を置かない)。
+"$HERE/check-min-os.sh" "tmux-$TMUX_VERSION/tmux"
 cp "tmux-$TMUX_VERSION/tmux" "$OUT/tmux"
 chmod +x "$OUT/tmux"
 

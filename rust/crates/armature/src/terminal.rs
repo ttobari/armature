@@ -1052,38 +1052,40 @@ pub fn terminal_palette() -> iced_term::ColorPalette {
             channel(color.b)
         )
     };
-    let dim = |color: iced::Color| hex(palette::mix(color, palette::crust(), 0.45));
-    let bright_white = palette::lighten(palette::text_ink(), 0.5);
+    // 16 色は各配色が配っている端末用の色そのまま。暗い色だけは地へ寄せて作る。
+    let dim = |color: iced::Color| hex(palette::mix(color, palette::surface_card(), 0.45));
+    let ansi = palette::ansi;
     iced_term::ColorPalette {
         foreground: hex(palette::text_ink()),
         // 器と同じ地(`palette::terminal_seat_style`)。
         background: hex(palette::surface_card()),
-        black: hex(palette::crust()),
-        red: hex(palette::red()),
-        green: hex(palette::green()),
-        yellow: hex(palette::yellow()),
-        blue: hex(palette::blue()),
-        magenta: hex(palette::mauve()),
-        cyan: hex(palette::sky()),
-        white: hex(palette::text_ink()),
-        bright_black: hex(palette::overlay1()),
-        bright_red: hex(palette::maroon()),
-        bright_green: hex(palette::green()),
-        bright_yellow: hex(palette::peach()),
-        bright_blue: hex(palette::blue()),
-        bright_magenta: hex(palette::mauve()),
-        bright_cyan: hex(palette::sky()),
-        bright_white: hex(bright_white),
-        bright_foreground: Some(hex(bright_white)),
+        black: hex(ansi(0)),
+        red: hex(ansi(1)),
+        green: hex(ansi(2)),
+        yellow: hex(ansi(3)),
+        blue: hex(ansi(4)),
+        magenta: hex(ansi(5)),
+        cyan: hex(ansi(6)),
+        white: hex(ansi(7)),
+        bright_black: hex(ansi(8)),
+        bright_red: hex(ansi(9)),
+        bright_green: hex(ansi(10)),
+        bright_yellow: hex(ansi(11)),
+        bright_blue: hex(ansi(12)),
+        bright_magenta: hex(ansi(13)),
+        bright_cyan: hex(ansi(14)),
+        bright_white: hex(ansi(15)),
+        // 太字を明るくする色は配色に無いので持たない(本文と同じ色で太くなるだけ)。
+        bright_foreground: None,
         dim_foreground: hex(palette::subtext0()),
-        dim_black: dim(palette::crust()),
-        dim_red: dim(palette::red()),
-        dim_green: dim(palette::green()),
-        dim_yellow: dim(palette::yellow()),
-        dim_blue: dim(palette::blue()),
-        dim_magenta: dim(palette::mauve()),
-        dim_cyan: dim(palette::sky()),
-        dim_white: dim(palette::subtext0()),
+        dim_black: dim(ansi(0)),
+        dim_red: dim(ansi(1)),
+        dim_green: dim(ansi(2)),
+        dim_yellow: dim(ansi(3)),
+        dim_blue: dim(ansi(4)),
+        dim_magenta: dim(ansi(5)),
+        dim_cyan: dim(ansi(6)),
+        dim_white: dim(ansi(7)),
         bright_black_background: Some(hex(palette::surface0())),
     }
 }

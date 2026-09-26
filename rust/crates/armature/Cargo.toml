@@ -29,7 +29,9 @@ iced = { version = "0.14.0", default-features = false, features = [
     "thread-pool",
     "advanced",
     # 音楽のパネルのアートワークを出す。画像パイプラインは iced 側の feature でしか生えない。
-    "image",
+    # 形式は下の `image` で選ぶ(iced の "image" は image の既定の features を丸ごと入れ、
+    # 使わない AVIF の書き出し器 rav1e まで組む)。
+    "image-without-codecs",
     # 印は Lucide の線画をそのまま描く。
     # Unicode の記号は書体任せで輪郭が揃わないので捨てた。
     "svg",
@@ -46,7 +48,9 @@ memchr = "2"
 wry = "0.56"
 objc2 = "0.6"
 block2 = "0.6"
-objc2-app-kit = { version = "0.3", features = [
+# objc2-* の既定の features は枠組みを丸ごと入れる(AppKit だけで数百)。使う型だけを足す。
+objc2-app-kit = { version = "0.3", default-features = false, features = [
+    "std",
     "block2",
     "NSApplication",
     "NSEvent",
@@ -58,8 +62,10 @@ objc2-app-kit = { version = "0.3", features = [
     "NSSavePanel",
     "NSView",
     "NSWindow",
+    # NSView::layer()(browser.rs の raise)。
+    "objc2-quartz-core",
 ] }
-objc2-foundation = { version = "0.3", features = ["NSArray", "NSError", "NSGeometry", "NSLocale", "NSString", "NSURL", "NSURLRequest"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSError", "NSGeometry", "NSLocale", "NSString", "NSURL", "NSURLRequest"] }
 # ブラウザの伝言の受け口(browser.rs の IpcReceiver)。送り主の枠が主フレームかを WebKit に訊く。
 # ⇧T の焦点の確かめは、頁と別の世界(WKContentWorld)で JS を走らせる。
 objc2-web-kit = { version = "0.3", default-features = false, features = [
@@ -76,7 +82,13 @@ objc2-web-kit = { version = "0.3", default-features = false, features = [
 ] }
 # ブラウザの面を前後に並べ、角を丸めるために CALayer を直に触る(browser.rs)。
 # 以前は iced の既定 features 経由で暗黙に有効になっていた——依存を明示に直した。
-objc2-quartz-core = { version = "0.3", features = ["CALayer"] }
+# "objc2-core-foundation" は CGFloat を取る setZPosition / setCornerRadius。
+objc2-quartz-core = { version = "0.3", default-features = false, features = ["std", "CALayer", "objc2-core-foundation"] }
+# iced の画像の読み込み(アートワーク)が読める形式。image の既定から、書き出しにしか使わない
+# "avif"(rav1e)と、並列化の "rayon" だけを抜いた。読める形式は前と同じ。
+image = { version = "0.25", default-features = false, features = [
+    "bmp", "dds", "exr", "ff", "gif", "hdr", "ico", "jpeg", "png", "pnm", "qoi", "tga", "tiff", "webp",
+] }
 
 # Loads the translation bridge after launch (`dlopen`, see apple_translation.rs).
 libc.workspace = true

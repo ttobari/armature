@@ -325,6 +325,9 @@ fn launch(app: App) -> Result<(), Error> {
     appearance::init();
     // 見本のタスクは言語が決まってから書く(前は先に書いていて、日本語の Mac でも英語になった)。
     seed_first_task();
+    // ダウンロードした版は、持ってきたソースを初回だけ ~/Armature/source へ書き出す
+    // (数 MB の展開なので窓を待たせないよう脇で。約束の文は展開の済みを待たずに書ける)。
+    std::thread::spawn(notes::unpack_source);
     // 書体は Cockpit::new が返す Task で登録する(application::font だと完了を
     // 受け取れず、端末がセル寸法を測る時刻と競う)。
     // 窓の寸法は拡大率を掛けてから winit へ渡るので、記憶した拡大率で開くときに
@@ -391,7 +394,7 @@ fn take_first_welcome() -> Option<String> {
     let page = exe
         .parent()?
         .parent()?
-        .join(tr!("Resources/welcome.html", "Resources/welcome-ja.html"));
+        .join("Resources/welcome.html");
     let html = std::fs::read_to_string(&page).ok()?;
     // 同梱の頁は素の Armature の置き場(~/Armature)で書いてある。名前を替えた版でも
     // 正しいフォルダを指すよう、置き場と名前を差し込んだ写しを状態の置き場に書いて開く。
@@ -418,10 +421,29 @@ fn shown_path(path: &std::path::Path, home: &str) -> String {
     }
 }
 
-/// はじめにの頁の `~/Armature` と題の `Armature` を、このアプリの置き場と名前に替える。
+/// はじめにの頁の `~/Armature` と題の `Armature` を、このアプリの置き場と名前に替え、
+/// 色(頁の `:root` の変数)をいまの配色で埋める。
 fn personalize_welcome(html: &str, tasks_home: &str, name: &str) -> String {
-    html.replace("~/Armature", &browser::html_escape(tasks_home))
-        .replace("— Armature</title>", &format!("— {}</title>", browser::html_escape(name)))
+    let html = html
+        .replace("~/Armature", &browser::html_escape(tasks_home))
+        .replace("— Armature</title>", &format!("— {}</title>", browser::html_escape(name)));
+    let hex = |color: iced::Color| {
+        let byte = |value: f32| (value.clamp(0.0, 1.0) * 255.0).round() as u8;
+        format!("#{:02x}{:02x}{:02x}", byte(color.r), byte(color.g), byte(color.b))
+    };
+    let colors = format!(
+        ":root {{ --crust: {}; --base: {}; --surface: {}; --text: {}; --sub: {}; --yellow: {}; }}",
+        hex(palette::surface_window()),
+        hex(palette::surface_raised()),
+        hex(palette::surface_active()),
+        hex(palette::text_primary()),
+        hex(palette::text_muted()),
+        hex(palette::yellow()),
+    );
+    match html.find(":root {").and_then(|start| Some((start, start + html[start..].find('}')? + 1))) {
+        Some((start, end)) => format!("{}{colors}{}", &html[..start], &html[end..]),
+        None => html,
+    }
 }
 
 /// Mac の既定のブラウザで開く(ブラウザのパネルを外しているとき)。`--` の後ろに置くので、
@@ -550,7 +572,7 @@ struct Cockpit {
     startup_binary: Option<BinaryFingerprint>,
     restart_available: bool,
     restart_error: Option<String>,
-    /// ▶ Restart を押してから、次の窓が開いたのを確かめて落ちるまでの間 true。
+    /// 再起動のアイコンを押してから、次の窓が開いたのを確かめて落ちるまでの間 true。
     /// 二度押しで窓を2枚起こさないための錠。
     restart_pending: bool,
     /// アドレス欄に出している字。頁が動けば追随し、打ち始めたら手を引く。
@@ -558,7 +580,7 @@ struct Cockpit {
     address_id: iced::widget::Id,
     /// アドレス欄を利用者が触っている間。頁側の URL で上書きしない印。
     address_editing: bool,
-    /// 前の窓が全画面のまま ▶ Restart を押していたか。窓が開いた1度だけ使う。
+    /// 前の窓が全画面のまま 再起動のアイコンを押していたか。窓が開いた1度だけ使う。
     restore_fullscreen: bool,
     /// 最後に窓の姿を控えた刻。全画面へ出入りする間、伸縮は何十回も来る。
     mode_noted_at: Option<Instant>,
@@ -643,7 +665,7 @@ enum Shortcut {
     Help,
     /// 設定(⌘ ,)。
     Appearance,
-    /// 窓ごと起こし直す(⇧⌘ R)。▶ Restart の札と同じ道。
+    /// 窓ごと起こし直す(⇧⌘ R)。再起動のアイコンと同じ道。
     Restart,
     /// 中央の端末へ鍵を渡す(⌘ ⏎)。頁が出ていれば畳んでから渡す。
     Terminal,
@@ -1089,7 +1111,7 @@ impl Cockpit {
                     Shortcut::ZoomReset => return self.apply_scale(font::DEFAULT_SCALE),
                     Shortcut::Help => return self.toggle_help(),
                     Shortcut::Appearance => return self.toggle_settings(),
-                    // ▶ Restart の札と同じ道を通す——姿の控えも巻の控えも
+                    // 再起動のアイコンと同じ道を通す——姿の控えも巻の控えも
                     // `Message::Restart` の側が面倒を見る。
                     Shortcut::Restart => return self.update(Message::Restart),
                 }
@@ -1424,7 +1446,7 @@ impl Cockpit {
             .height(Length::Fill)
             .style(move |_| center_frame_style(center_active));
         // 左右の列は `panels.conf` の並びどおりに積む(`layout.rs`)。空の列は出さない。
-        // ▶ Restart の札は右の列の下(右が空なら左の列の下)。
+        // 再起動のアイコンは右の列の下(右が空なら左の列の下)。
         // 列と列の間は線1本([`LINE`])。線が `geo.gap_x` の隙間そのものなので、
         // WebView の矩形([`browser_bounds`])と並びは同じ数から出る。
         let mut columns = row![].height(Length::Fill);
@@ -1487,7 +1509,7 @@ impl Cockpit {
     }
 
 
-    /// 差し替えが済んだときだけ生える ▶ Restart の札。
+    /// 差し替えが済んだときだけ生える 再起動のアイコン。
     ///
     /// **反映の口だけは画面に残す。**押せなければ、新しい実体に入れ替われない。
     fn restart_badge(&self) -> Option<Element<'_, Message>> {
@@ -2931,7 +2953,7 @@ fn restart_mode_path() -> std::path::PathBuf {
     armature_core::geo::state_dir().join("cockpit/restart.conf")
 }
 
-/// ▶ Restart を押した窓が「次の窓が開くまで待っている」印。置くのは古い窓、
+/// 再起動のアイコンを押した窓が「次の窓が開くまで待っている」印。置くのは古い窓、
 /// 消すのは次の窓の `Opened`。中身は置いた側の pid(読み手はいない・目視用)。
 fn restart_handoff_path() -> std::path::PathBuf {
     armature_core::geo::state_dir().join("cockpit/restart.handoff")
@@ -3023,7 +3045,7 @@ fn load_window_place() -> WindowPlace {
 /// 姿を控え直すまでの間。
 const MODE_NOTE_GAP: std::time::Duration = std::time::Duration::from_millis(400);
 
-/// ▶ Restart を押した窓が次の窓へ渡す申し送り。
+/// 再起動のアイコンを押した窓が次の窓へ渡す申し送り。
 ///
 /// **持っていくのは「どう立つか」だけ。** 中身(観ていた所・開いていたタブ)は
 /// それぞれの正本が既に控えているので、ここに写しを作らない。
@@ -3039,7 +3061,7 @@ impl RestartNote {
     }
 }
 
-/// ▶ Restart を押した窓の申し送りを焼く。渡すものが無ければ札そのものを消す
+/// 再起動のアイコンを押した窓の申し送りを焼く。渡すものが無ければ札そのものを消す
 /// ——古い札が残っていると、次の窓が理由もなく全画面で立つ。
 fn store_restart_note(note: &RestartNote) {
     let path = restart_mode_path();
@@ -3503,14 +3525,19 @@ mod tests {
         assert_eq!(shown_path(Path::new("/Users/someone2/Armature"), home), "/Users/someone2/Armature");
         assert_eq!(shown_path(Path::new("/Volumes/x/Armature"), home), "/Volumes/x/Armature");
 
-        for page in [include_str!("../assets/welcome.html"), include_str!("../assets/welcome-ja.html")] {
-            let html = personalize_welcome(page, "~/My <Armature>", "My <Armature>");
-            assert!(!html.contains("~/Armature"));
-            assert!(html.contains("~/My &lt;Armature&gt;/tasks/"));
-            assert!(html.contains("— My &lt;Armature&gt;</title>"));
-            // 見た目の設定は削ってある。頁が無い設定を案内しない。
-            assert!(!html.contains("look,") && !html.contains("見た目"));
-        }
+        let page = include_str!("../assets/welcome.html");
+        let html = personalize_welcome(page, "~/My <Armature>", "My <Armature>");
+        assert!(!html.contains("~/Armature"));
+        assert!(html.contains("— My &lt;Armature&gt;</title>"));
+        // 色はいまの配色から(頁に書いてある Frappé の色のままにしない)。
+        palette::set_test_theme(Some(palette::Theme::Gruvbox));
+        let gruvbox = personalize_welcome(page, "~/Armature", "Armature");
+        palette::set_test_theme(None);
+        assert!(gruvbox.contains("--crust: #1d2021;") && gruvbox.contains("--text: #ebdbb2;"));
+        assert!(!gruvbox.contains("#c6d0f5"));
+        // 頁は英語 1 枚で、載せるキーは ⌘B と ⌘T だけ。ほかは Claude に聞いてもらう。
+        assert_eq!(html.matches("<kbd>").count(), 2);
+        assert!(html.contains("<kbd>⌘B</kbd>") && html.contains("<kbd>⌘T</kbd>"));
     }
 
     #[test]

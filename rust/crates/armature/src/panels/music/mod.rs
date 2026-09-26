@@ -414,3 +414,44 @@ fn artwork_path(key: &str) -> std::path::PathBuf {
     }
     armature_core::paths::state().join(format!("artwork-{hash:016x}.jpg"))
 }
+
+#[cfg(test)]
+mod tests {
+    use image::{DynamicImage, ImageFormat, Rgb, RgbImage};
+
+    #[test]
+    fn artwork_reads_the_formats_listed_in_cargo_toml() {
+        // iced は `Handle::from_bytes` の絵を `image::load_from_memory` で中身から見分けて読む。
+        // 曲に埋め込まれる絵は JPEG・PNG のほか GIF・BMP・TIFF・WebP もある。Cargo.toml の
+        // `image` の features を絞ると、その形式のアートワークが黙って出なくなる。
+        // 列挙した形式のうち、DDS は image が書けず、TGA は中身に印が無くて見分けられない
+        // (パスから拡張子で読むときだけ読める)ので、ここでは確かめない。
+        let rgb = DynamicImage::ImageRgb8(RgbImage::from_pixel(4, 3, Rgb([200, 120, 40])));
+        // ICO の中の PNG は RGBA でないと読めない決まり(実物の ICO も RGBA)。
+        let rgba = DynamicImage::ImageRgba8(rgb.to_rgba8());
+        let rgba16 = DynamicImage::ImageRgba16(rgb.to_rgba16());
+        let rgb32f = DynamicImage::ImageRgb32F(rgb.to_rgb32f());
+        for (format, picture) in [
+            (ImageFormat::Jpeg, &rgb),
+            (ImageFormat::Png, &rgb),
+            (ImageFormat::Gif, &rgb),
+            (ImageFormat::Bmp, &rgb),
+            (ImageFormat::Tiff, &rgb),
+            (ImageFormat::WebP, &rgb),
+            (ImageFormat::Ico, &rgba),
+            (ImageFormat::Pnm, &rgb),
+            (ImageFormat::Qoi, &rgb),
+            (ImageFormat::Farbfeld, &rgba16),
+            (ImageFormat::Hdr, &rgb32f),
+            (ImageFormat::OpenExr, &rgb32f),
+        ] {
+            let mut bytes = std::io::Cursor::new(Vec::new());
+            picture
+                .write_to(&mut bytes, format)
+                .unwrap_or_else(|error| panic!("{format:?} を書けない: {error}"));
+            let read = image::load_from_memory(bytes.get_ref())
+                .unwrap_or_else(|error| panic!("{format:?} を読めない: {error}"));
+            assert_eq!((read.width(), read.height()), (4, 3), "{format:?}");
+        }
+    }
+}

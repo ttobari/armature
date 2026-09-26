@@ -33,6 +33,15 @@ VERSION="${VERSION:-$(sed -n 's/^version = "\(.*\)"/\1/p' "$RUST/Cargo.toml" | h
 DIST="${DIST:-$ROOT/dist}"
 APP="$DIST/$APP_NAME.app"
 SIGN_ID="${SIGN_ID:--}"
+# 組み立て済みの Armature の束。そこの tmux と書体が同じ版なら、組まず・取り寄せずに写す
+# (ダウンロードした版を、その同梱ソースから組み直すとき)。
+REUSE_FROM="${REUSE_FROM:-}"
+# 配布用の束にはソースを同梱する(7b)。コミットしていない変更があると、同梱するソースと
+# 組んだ中身が食い違うので、組む前に止める。
+if [ "$SIGN_ID" != "-" ] && ! git -C "$ROOT" diff --quiet HEAD --; then
+    echo "コミットしていない変更がある: 配布用の束に入れるソースと組む中身が食い違う" >&2
+    exit 1
+fi
 ICON="${ICON:-$RUST/crates/armature/assets/Cockpit.icon}"
 CARGO_BIN="${CARGO_BIN:-$(command -v cargo || echo "$HOME/.cargo/bin/cargo")}"
 
@@ -40,12 +49,9 @@ CARGO_BIN="${CARGO_BIN:-$(command -v cargo || echo "$HOME/.cargo/bin/cargo")}"
 #    (rustc は後に書いた置き換えを優先する。ホーム全体を先に、細かいものを後に。)
 #    旗は CARGO_ENCODED_RUSTFLAGS(区切りは 0x1f)で渡す。RUSTFLAGS は空白で切るので、
 #    空白を含む置き場(`~/My Projects/…`)で壊れる。
-SEP=$(printf '\037')
-REMAP="--remap-path-prefix=$HOME=/home$SEP--remap-path-prefix=$HOME/.cargo/registry/src=/cargo$SEP--remap-path-prefix=$HOME/.rustup=/rustup$SEP--remap-path-prefix=$ROOT=/src"
-# proc-macro だけ strip を切る。Rust 1.97 までの strip は proc-macro の dylib を macOS 27 が
-# 読めない形に削る(rust-lang/rust#157750。1.98.0 で直った)。束の中身は変わらない。
-CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_STRIP=false CARGO_ENCODED_RUSTFLAGS="$REMAP" \
-    MACOSX_DEPLOYMENT_TARGET=15.0 LANG=ja_JP.UTF-8 "$CARGO_BIN" build --release \
+#    旗は scripts/test.sh と同じ(cargo-env.sh)。違うと依存を丸ごと組み直す。
+. "$HERE/cargo-env.sh"
+LANG=ja_JP.UTF-8 "$CARGO_BIN" build --release \
     --manifest-path "$MANIFEST" -p "$PACKAGE" --bin "$BINARY_NAME"
 BIN="$TARGET_DIR/release/$BINARY_NAME"
 BRIDGE="$TARGET_DIR/release/libCockpitTranslation.dylib"
@@ -53,14 +59,27 @@ mkdir -p "$DIST"
 
 # 2. 同梱の tmux。Armature 本体の dist に同じ版を組んだものがあれば使い回し、無ければ組む。
 TMUX_VERSION=$(sed -n 's/^TMUX_VERSION=//p' "$HERE/build-tmux.sh")
-current_tmux() {
+same_tmux() {
     [ -x "$1" ] && [ "$("$1" -V 2>/dev/null)" = "tmux $TMUX_VERSION" ]
+}
+# 版が同じでも、最低 OS に無い関数を弱リンクで呼ぶ物(0.1.1 までの束の tmux)は使い回さない。
+current_tmux() {
+    same_tmux "$1" && "$HERE/check-min-os.sh" "$1" 2>/dev/null
 }
 TMUX_HELPER="$DIST/helpers/tmux"
 if ! current_tmux "$TMUX_HELPER"; then
     if current_tmux "$ROOT/dist/helpers/tmux"; then
         TMUX_HELPER="$ROOT/dist/helpers/tmux"
+    elif [ -n "$REUSE_FROM" ] && current_tmux "$REUSE_FROM/Contents/Helpers/tmux"; then
+        # 動いているアプリが同じ版の tmux を持っている(ダウンロードした版の組み直し)。
+        mkdir -p "$DIST/helpers"
+        cp "$REUSE_FROM/Contents/Helpers/tmux" "$TMUX_HELPER"
     else
+        for old in "$ROOT/dist/helpers/tmux" ${REUSE_FROM:+"$REUSE_FROM/Contents/Helpers/tmux"}; do
+            if same_tmux "$old"; then
+                echo "$old は最低 OS に無い関数を弱リンクで呼んでいて古い macOS で落ちるので使わず、tmux を組み直す(ソースを取り寄せる)" >&2
+            fi
+        done
         "$HERE/build-tmux.sh" "$DIST/helpers"
     fi
 fi
@@ -81,15 +100,23 @@ cp "$TMUX_HELPER" "$APP/Contents/Helpers/tmux"
 # 4. 書体(どれも SIL OFL 1.1)。決まった版を公式の配布から取り寄せて照合したもの
 #    (dist/fonts)だけを入れる。組む機体に入っている別の版は使わない。
 FONTS="MoralerspaceArgon-Regular.ttf MoralerspaceArgon-Bold.ttf MoralerspaceArgon-Italic.ttf MoralerspaceArgon-BoldItalic.ttf JetBrainsMonoNerdFontMono-Regular.ttf"
+# 動いているアプリの書体を先に写しておく(版の印 VERSIONS が合えば fetch-fonts.sh は取り寄せない。
+# 合わなければ捨てて取り寄せ直す)。
+if [ -n "$REUSE_FROM" ] && [ -f "$REUSE_FROM/Contents/Resources/fonts/VERSIONS" ] &&
+    [ ! -f "$ROOT/dist/fonts/VERSIONS" ]; then
+    mkdir -p "$ROOT/dist/fonts"
+    cp "$REUSE_FROM/Contents/Resources/fonts/"*.ttf "$REUSE_FROM/Contents/Resources/fonts/VERSIONS" \
+        "$ROOT/dist/fonts/"
+fi
 "$HERE/fetch-fonts.sh" >/dev/null
 for font in $FONTS; do
     [ -f "$ROOT/dist/fonts/$font" ] || { echo "書体が無い: $font" >&2; exit 1; }
     cp "$ROOT/dist/fonts/$font" "$APP/Contents/Resources/fonts/"
 done
+cp "$ROOT/dist/fonts/VERSIONS" "$APP/Contents/Resources/fonts/"
 
 # 4.5 初回に開く「はじめに」の頁。
 cp "$CRATE/assets/welcome.html" "$APP/Contents/Resources/welcome.html"
-cp "$CRATE/assets/welcome-ja.html" "$APP/Contents/Resources/welcome-ja.html"
 
 # 5. 第三者の許諾文。Rust の標準ライブラリの分は、組んだ toolchain に付いてくるものを写す。
 cp "$ROOT/licenses/"* "$APP/Contents/Resources/licenses/"
@@ -191,7 +218,15 @@ if [ "$SIGN_ID" = "-" ]; then
             "$(quote "$APP_NAME")" "$(quote "$BUNDLE_ID")" "$(quote "$DIST")" "$(quote "$ICON")" \
             "$(quote "$ROOT/scripts/make-app.sh")"
     } > "$APP/Contents/Resources/source.txt"
+else
+    # 配布用の束は、その版のソースを丸ごと持つ(初回に ~/Armature/source へ書き出す・
+    # `src/notes.rs`)。中身は組んだ木と同じ(コミットしていない変更は冒頭で止めてある)。
+    git -C "$ROOT" archive --format=tar.gz HEAD > "$APP/Contents/Resources/source.tar.gz"
 fi
+
+# 7c. 束の中の Mach-O が、最低 OS(15.0)に無い C の関数を弱リンクで呼んでいないこと。
+#     組む機体の SDK が新しいと、古い macOS で起動直後に落ちる物ができる(scripts/check-min-os.sh)。
+"$HERE/check-min-os.sh" "$APP"
 
 # 8. 署名。中身から外へ。配布用(Developer ID)のときは hardened runtime と時刻印を付ける。
 sign() {

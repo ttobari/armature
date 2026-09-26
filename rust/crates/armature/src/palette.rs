@@ -94,9 +94,9 @@ impl Theme {
     }
 }
 
-/// 配色1組。値は各配色の公式の色(画面の色だけはこちらで選ぶ)。
+/// 配色1組。値は各配色の公式の色。
 struct Ink {
-    /// 窓の地とパネルの面。配色のいちばん暗い地か、それより一段沈めた色。
+    /// 窓の地とパネルの面。配色の公式の背景。
     screen: Color,
     crust: Color,
     base: Color,
@@ -115,11 +115,14 @@ struct Ink {
     sky: Color,
     flamingo: Color,
     mauve: Color,
+    /// 端末の 16 色(黒・赤・緑・黄・青・紫・水・白、続けて明るい 8 色)。各配色が
+    /// 配っている端末用の色そのまま。
+    ansi: [Color; 16],
 }
 
-/// Catppuccin Frappé。画面は crust を 35% 沈めた黒(青みを残したまま字と線が立つ深さ)。
+/// Catppuccin Frappé。
 const FRAPPE: Ink = Ink {
-    screen: rgb(0x18, 0x19, 0x22),
+    screen: rgb(0x30, 0x34, 0x46),
     crust: rgb(0x23, 0x26, 0x34),
     base: rgb(0x30, 0x34, 0x46),
     surface0: rgb(0x41, 0x45, 0x59),
@@ -137,11 +140,29 @@ const FRAPPE: Ink = Ink {
     sky: rgb(0x99, 0xd1, 0xdb),
     flamingo: rgb(0xee, 0xbe, 0xbe),
     mauve: rgb(0xca, 0x9e, 0xe6),
+    ansi: [
+        rgb(0x51, 0x57, 0x6d),
+        rgb(0xe7, 0x82, 0x84),
+        rgb(0xa6, 0xd1, 0x89),
+        rgb(0xe5, 0xc8, 0x90),
+        rgb(0x8c, 0xaa, 0xee),
+        rgb(0xf4, 0xb8, 0xe4),
+        rgb(0x81, 0xc8, 0xbe),
+        rgb(0xb5, 0xbf, 0xe2),
+        rgb(0x62, 0x68, 0x80),
+        rgb(0xe7, 0x82, 0x84),
+        rgb(0xa6, 0xd1, 0x89),
+        rgb(0xe5, 0xc8, 0x90),
+        rgb(0x8c, 0xaa, 0xee),
+        rgb(0xf4, 0xb8, 0xe4),
+        rgb(0x81, 0xc8, 0xbe),
+        rgb(0xa5, 0xad, 0xce),
+    ],
 };
 
 /// Catppuccin Mocha。
 const MOCHA: Ink = Ink {
-    screen: rgb(0x11, 0x11, 0x1b),
+    screen: rgb(0x1e, 0x1e, 0x2e),
     crust: rgb(0x11, 0x11, 0x1b),
     base: rgb(0x1e, 0x1e, 0x2e),
     surface0: rgb(0x31, 0x32, 0x44),
@@ -159,11 +180,29 @@ const MOCHA: Ink = Ink {
     sky: rgb(0x89, 0xdc, 0xeb),
     flamingo: rgb(0xf2, 0xcd, 0xcd),
     mauve: rgb(0xcb, 0xa6, 0xf7),
+    ansi: [
+        rgb(0x45, 0x47, 0x5a),
+        rgb(0xf3, 0x8b, 0xa8),
+        rgb(0xa6, 0xe3, 0xa1),
+        rgb(0xf9, 0xe2, 0xaf),
+        rgb(0x89, 0xb4, 0xfa),
+        rgb(0xf5, 0xc2, 0xe7),
+        rgb(0x94, 0xe2, 0xd5),
+        rgb(0xba, 0xc2, 0xde),
+        rgb(0x58, 0x5b, 0x70),
+        rgb(0xf3, 0x8b, 0xa8),
+        rgb(0xa6, 0xe3, 0xa1),
+        rgb(0xf9, 0xe2, 0xaf),
+        rgb(0x89, 0xb4, 0xfa),
+        rgb(0xf5, 0xc2, 0xe7),
+        rgb(0x94, 0xe2, 0xd5),
+        rgb(0xa6, 0xad, 0xc8),
+    ],
 };
 
 /// Tokyo Night(night)。
 const TOKYO_NIGHT: Ink = Ink {
-    screen: rgb(0x16, 0x16, 0x1e),
+    screen: rgb(0x1a, 0x1b, 0x26),
     crust: rgb(0x16, 0x16, 0x1e),
     base: rgb(0x1a, 0x1b, 0x26),
     surface0: rgb(0x29, 0x2e, 0x42),
@@ -181,11 +220,29 @@ const TOKYO_NIGHT: Ink = Ink {
     sky: rgb(0x7d, 0xcf, 0xff),
     flamingo: rgb(0xf7, 0x76, 0x8e),
     mauve: rgb(0xbb, 0x9a, 0xf7),
+    ansi: [
+        rgb(0x15, 0x16, 0x1e),
+        rgb(0xf7, 0x76, 0x8e),
+        rgb(0x9e, 0xce, 0x6a),
+        rgb(0xe0, 0xaf, 0x68),
+        rgb(0x7a, 0xa2, 0xf7),
+        rgb(0xbb, 0x9a, 0xf7),
+        rgb(0x7d, 0xcf, 0xff),
+        rgb(0xa9, 0xb1, 0xd6),
+        rgb(0x41, 0x48, 0x68),
+        rgb(0xff, 0x89, 0x9d),
+        rgb(0x9f, 0xe0, 0x44),
+        rgb(0xfa, 0xba, 0x4a),
+        rgb(0x8d, 0xb0, 0xff),
+        rgb(0xc7, 0xa9, 0xff),
+        rgb(0xa4, 0xda, 0xff),
+        rgb(0xc0, 0xca, 0xf5),
+    ],
 };
 
-/// Nord。画面は Polar Night(nord0)より一段沈めた色——nord0 のままだと線が立たない。
+/// Nord。
 const NORD: Ink = Ink {
-    screen: rgb(0x24, 0x29, 0x33),
+    screen: rgb(0x2e, 0x34, 0x40),
     crust: rgb(0x2e, 0x34, 0x40),
     base: rgb(0x2e, 0x34, 0x40),
     surface0: rgb(0x3b, 0x42, 0x52),
@@ -203,6 +260,24 @@ const NORD: Ink = Ink {
     sky: rgb(0x88, 0xc0, 0xd0),
     flamingo: rgb(0xbf, 0x61, 0x6a),
     mauve: rgb(0xb4, 0x8e, 0xad),
+    ansi: [
+        rgb(0x3b, 0x42, 0x52),
+        rgb(0xbf, 0x61, 0x6a),
+        rgb(0xa3, 0xbe, 0x8c),
+        rgb(0xeb, 0xcb, 0x8b),
+        rgb(0x81, 0xa1, 0xc1),
+        rgb(0xb4, 0x8e, 0xad),
+        rgb(0x88, 0xc0, 0xd0),
+        rgb(0xe5, 0xe9, 0xf0),
+        rgb(0x4c, 0x56, 0x6a),
+        rgb(0xbf, 0x61, 0x6a),
+        rgb(0xa3, 0xbe, 0x8c),
+        rgb(0xeb, 0xcb, 0x8b),
+        rgb(0x81, 0xa1, 0xc1),
+        rgb(0xb4, 0x8e, 0xad),
+        rgb(0x8f, 0xbc, 0xbb),
+        rgb(0xec, 0xef, 0xf4),
+    ],
 };
 
 /// Gruvbox(dark・hard)。
@@ -225,11 +300,29 @@ const GRUVBOX: Ink = Ink {
     sky: rgb(0x8e, 0xc0, 0x7c),
     flamingo: rgb(0xfb, 0x49, 0x34),
     mauve: rgb(0xd3, 0x86, 0x9b),
+    ansi: [
+        rgb(0x3c, 0x38, 0x36),
+        rgb(0xcc, 0x24, 0x1d),
+        rgb(0x98, 0x97, 0x1a),
+        rgb(0xd7, 0x99, 0x21),
+        rgb(0x45, 0x85, 0x88),
+        rgb(0xb1, 0x62, 0x86),
+        rgb(0x68, 0x9d, 0x6a),
+        rgb(0xa8, 0x99, 0x84),
+        rgb(0x92, 0x83, 0x74),
+        rgb(0xfb, 0x49, 0x34),
+        rgb(0xb8, 0xbb, 0x26),
+        rgb(0xfa, 0xbd, 0x2f),
+        rgb(0x83, 0xa5, 0x98),
+        rgb(0xd3, 0x86, 0x9b),
+        rgb(0x8e, 0xc0, 0x7c),
+        rgb(0xfb, 0xf1, 0xc7),
+    ],
 };
 
 /// Dracula。
 const DRACULA: Ink = Ink {
-    screen: rgb(0x21, 0x22, 0x2c),
+    screen: rgb(0x28, 0x2a, 0x36),
     crust: rgb(0x19, 0x1a, 0x21),
     base: rgb(0x28, 0x2a, 0x36),
     surface0: rgb(0x34, 0x37, 0x46),
@@ -247,6 +340,24 @@ const DRACULA: Ink = Ink {
     sky: rgb(0x8b, 0xe9, 0xfd),
     flamingo: rgb(0xff, 0x79, 0xc6),
     mauve: rgb(0xbd, 0x93, 0xf9),
+    ansi: [
+        rgb(0x21, 0x22, 0x2c),
+        rgb(0xff, 0x55, 0x55),
+        rgb(0x50, 0xfa, 0x7b),
+        rgb(0xf1, 0xfa, 0x8c),
+        rgb(0xbd, 0x93, 0xf9),
+        rgb(0xff, 0x79, 0xc6),
+        rgb(0x8b, 0xe9, 0xfd),
+        rgb(0xf8, 0xf8, 0xf2),
+        rgb(0x62, 0x72, 0xa4),
+        rgb(0xff, 0x6e, 0x6e),
+        rgb(0x69, 0xff, 0x94),
+        rgb(0xff, 0xff, 0xa5),
+        rgb(0xd6, 0xac, 0xff),
+        rgb(0xff, 0x92, 0xdf),
+        rgb(0xa4, 0xff, 0xff),
+        rgb(0xff, 0xff, 0xff),
+    ],
 };
 
 /// いまの配色([`Theme::ALL`] の添字)。描くたびに何百回と読むので原子の1バイト。
@@ -362,7 +473,7 @@ pub fn surface_card() -> Color {
 }
 
 /// パネルの境の線(1px)。画面を surface1 へ3分の1だけ寄せた、同じ色相の線
-/// (Frappé で #2b2e3b)。これより淡いと 1px では見えず、濃いと席の数だけ格子が浮く。
+/// (Frappé で #3b3f52)。これより淡いと 1px では見えず、濃いと席の数だけ格子が浮く。
 #[must_use]
 pub fn surface_line() -> Color {
     mix(ink().screen, ink().surface1, LINE_LIFT)
@@ -417,10 +528,11 @@ pub fn text_faint() -> Color {
 }
 
 /// 光る字の芯。「いま」を指すもの——時計・暦の今日・選んでいる行——だけに使う。
-/// 本文を白へ半分寄せた色で、まわりの滲みは [`crate::glow`] が足す。
+/// 芯は配色の本文の色そのもので、まわりの滲みは [`crate::glow`] が足す
+/// (配色に無い明るさを作らない)。
 #[must_use]
 pub fn text_lit() -> Color {
-    lighten(text_ink(), 0.5)
+    text_ink()
 }
 
 /// 沈みの深さ(1.0 = 沈めない)。
@@ -517,33 +629,34 @@ pub fn terminal_seat_style() -> container::Style {
     card_style()
 }
 
-// ── §3 model / effort ────────────────────────────────────────────────────
-// Claude Code の statusline でよく使われる Catppuccin Mocha の色。
+/// 端末の 16 色の `index` 番(0〜15)。いまの配色の端末用の色。
+#[must_use]
+pub fn ansi(index: usize) -> Color {
+    ink().ansi[index % 16]
+}
 
-pub const MOCHA_FABLE: Color = Color::from_rgb8(0xf5, 0xe0, 0xdc);
-pub const MOCHA_OPUS: Color = Color::from_rgb8(0xf2, 0xcd, 0xcd);
-pub const MOCHA_SONNET: Color = Color::from_rgb8(0xf5, 0xc2, 0xe7);
-pub const MOCHA_DEFAULT: Color = Color::from_rgb8(0x93, 0x99, 0xb2);
+// ── §3 model / effort ────────────────────────────────────────────────────
+// いまの配色から取る(配色を替えても、ここだけ別の配色の色で浮かない)。
 
 #[must_use]
 pub fn model(name: &str) -> Color {
     match name.to_ascii_lowercase().as_str() {
-        "fable" => MOCHA_FABLE,
-        "opus" => MOCHA_OPUS,
-        "sonnet" => MOCHA_SONNET,
-        _ => MOCHA_DEFAULT,
+        "fable" => peach(),
+        "opus" => flamingo(),
+        "sonnet" => mauve(),
+        _ => overlay1(),
     }
 }
 
 #[must_use]
 pub fn effort(name: &str) -> Color {
     match name.to_ascii_lowercase().as_str() {
-        "low" => Color::from_rgb8(0x6c, 0x70, 0x86),
-        "medium" => Color::from_rgb8(0x89, 0xb4, 0xfa),
-        "high" => Color::from_rgb8(0x89, 0xdc, 0xeb),
-        "xhigh" => Color::from_rgb8(0x94, 0xe2, 0xd5),
-        "max" => Color::from_rgb8(0xa6, 0xe3, 0xa1),
-        _ => MOCHA_DEFAULT,
+        "low" => overlay1(),
+        "medium" => blue(),
+        "high" => sky(),
+        "xhigh" => mix(sky(), green(), 0.5),
+        "max" => green(),
+        _ => overlay1(),
     }
 }
 
@@ -551,13 +664,37 @@ pub fn effort(name: &str) -> Color {
 mod tests {
     use super::*;
 
+    /// モデルと思考量の色はいまの配色から取る。
     #[test]
-    fn model_and_effort_reuse_the_existing_mocha_colors() {
-        assert_eq!(model("opus"), Color::from_rgb8(0xf2, 0xcd, 0xcd));
-        assert_eq!(model("SONNET"), Color::from_rgb8(0xf5, 0xc2, 0xe7));
-        assert_eq!(model("unknown"), MOCHA_DEFAULT);
-        assert_eq!(effort("high"), Color::from_rgb8(0x89, 0xdc, 0xeb));
-        assert_eq!(effort("max"), Color::from_rgb8(0xa6, 0xe3, 0xa1));
+    fn model_and_effort_follow_the_theme() {
+        for theme in Theme::ALL {
+            set_test_theme(Some(theme));
+            assert_eq!(model("OPUS"), flamingo(), "{theme:?}");
+            assert_eq!(model("unknown"), overlay1(), "{theme:?}");
+            assert_eq!(effort("max"), green(), "{theme:?}");
+        }
+        set_test_theme(None);
+    }
+
+    /// 窓の地は各配色の公式の背景、端末の黒は地と別の色(黒の字が地に溶けない)。
+    #[test]
+    fn the_screen_is_the_official_background_and_black_stays_visible() {
+        let official = [
+            (Theme::CatppuccinFrappe, rgb(0x30, 0x34, 0x46)),
+            (Theme::CatppuccinMocha, rgb(0x1e, 0x1e, 0x2e)),
+            (Theme::TokyoNight, rgb(0x1a, 0x1b, 0x26)),
+            (Theme::Nord, rgb(0x2e, 0x34, 0x40)),
+            (Theme::Gruvbox, rgb(0x1d, 0x20, 0x21)),
+            (Theme::Dracula, rgb(0x28, 0x2a, 0x36)),
+        ];
+        for (theme, background) in official {
+            set_test_theme(Some(theme));
+            assert_eq!(surface_window(), background, "{theme:?}");
+            assert_ne!(ansi(0), background, "{theme:?}");
+            // 明るい黄は黄の系統(橙ではない)。
+            assert!(ansi(11).g > ansi(11).b, "{theme:?}");
+        }
+        set_test_theme(None);
     }
 
     /// 窓の地とパネルは同じ1枚の画面。境は線が引く。
@@ -625,7 +762,7 @@ mod tests {
             for pair in text.windows(2) {
                 assert!(sum(pair[0]) > sum(pair[1]), "{theme:?} の文字の階層: {pair:?}");
             }
-            assert!(sum(text_lit()) > sum(text_primary()), "{theme:?}");
+            assert_eq!(text_lit(), text_primary(), "{theme:?} の光る字の芯は本文の色");
         }
         set_test_theme(None);
     }

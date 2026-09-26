@@ -21,14 +21,19 @@ rust/
     src/palette.rs       the colors (the six color themes) and corner radii
     src/terminal.rs      Armature's own tmux, and how Claude tabs are started
     src/main.rs          the plain Armature binary
-    assets/              bundled pages and images (welcome.html, welcome-ja.html …)
+    assets/              bundled pages and images (welcome.html …)
     vendor/              a patched copy of iced_term
   crates/armature-core/   the layer below (Claude Code sessions, task files and their order, calendar,
                        paths, lang)
 scripts/
-  make-app.sh          builds the app bundle into dist/ (and signs it)
+  install.sh           checks the tools, builds, puts the app in Applications and opens it
+  make-app.sh          builds the app bundle into dist/ (and signs it); REUSE_FROM=<an Armature.app>
+                       takes tmux and the fonts from it instead of building and fetching them
+  test.sh              the tests, with make-app.sh's settings (one build of the dependencies)
+  fetch-fonts.sh       the bundled fonts into dist/fonts (in an app: Contents/Resources/fonts)
   build-tmux.sh        builds the bundled tmux from source
-  release.sh           signed, notarized DMG
+  check-min-os.sh      stops a build whose binaries weak-link C functions newer than macOS 15.0
+  release.sh           signed, notarized DMG (carries its own source, unpacked to ~/Armature/source)
 ```
 
 ## Two ways to add a panel
@@ -161,6 +166,10 @@ only the tasks, set `TASKS_HOME` in `<state folder>/config.env`.
 Armature never changes its own process environment: children (tmux, claude, shells) get theirs
 through `armature_core::proc::child_env`, so your `main` and your panels may start threads freely.
 
+Armature turns on only the parts of tokio it uses (`rt`, `rt-multi-thread`, `sync`, `time`,
+`macros`). A panel that uses more of it (`tokio::process`, `fs`, `net`, `io-util` …) lists those
+features in its own crate's `tokio` dependency.
+
 Updating Armature is `git pull` in this checkout, then building your crate again.
 
 ### 2. A panel in this repository
@@ -222,8 +231,9 @@ written in the current language.
 ## Building
 
 ```sh
-cargo test --manifest-path rust/Cargo.toml --workspace   # tests
+scripts/test.sh                                          # tests (release, sharing the app's build)
 scripts/make-app.sh                                       # dist/Armature.app
+scripts/install.sh                                        # the above, into Applications, opened
 ```
 
 ## Panels that would be fun to add

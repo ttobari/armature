@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use armature_core::tr;
+use crate::palette;
 use std::collections::BTreeMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -954,7 +955,7 @@ const PAGE_SURFACE: &str = r#"
     var bodyStyle = document.body ? getComputedStyle(document.body) : null;
     if (!hasSurface(rootStyle) && (!bodyStyle || !hasSurface(bodyStyle))) {
       var ink = getComputedStyle(textProbe(root)).color;
-      var surface = brightness(ink) < 150 ? '#f7f5ef' : '#303446';
+      var surface = brightness(ink) < 150 ? '#f7f5ef' : '__ARMATURE_SCREEN__';
       // サイト側が透明色を !important で指定していても、選んだ紙面色は確実に描く。
       // 次の apply 冒頭で外すため、サイトが後から本来の背景を持った場合は邪魔しない。
       root.style.setProperty('background-color', surface, 'important');
@@ -1115,8 +1116,8 @@ const HINTS: &str = r#"
       placed.push({x: x, y: y, w: w, h: h});
       var badge = document.createElement('span');
       badge.style.cssText = 'position:fixed;left:' + x + 'px;top:' + y + 'px;' +
-        'padding:1px 4px;border-radius:4px;background:#f2c94c;box-shadow:0 1px 3px rgba(0,0,0,.4);' +
-        'color:#303446;font:bold 12px/1.2 -apple-system,sans-serif;letter-spacing:.5px;';
+        'padding:1px 4px;border-radius:4px;background:__ARMATURE_HINT__;box-shadow:0 1px 3px rgba(0,0,0,.4);' +
+        'color:__ARMATURE_HINT_INK__;font:bold 12px/1.2 -apple-system,sans-serif;letter-spacing:.5px;';
       var head = document.createElement('i'), tail = document.createElement('i');
       head.style.cssText = 'font-style:normal;opacity:.35;';
       tail.style.cssText = 'font-style:normal;';
@@ -1525,9 +1526,11 @@ fn translation_script() -> String {
             "shown": "日本語 (t で原文)",
         }),
     );
-    TRANSLATION
-        .replace("__ARMATURE_TARGET__", armature_core::lang::current().key())
-        .replace("__ARMATURE_TR_LABELS__", &labels.to_string())
+    themed(
+        &TRANSLATION
+            .replace("__ARMATURE_TARGET__", armature_core::lang::current().key())
+            .replace("__ARMATURE_TR_LABELS__", &labels.to_string()),
+    )
 }
 
 const TRANSLATION: &str = r#"
@@ -1574,7 +1577,7 @@ const TRANSLATION: &str = r#"
   function setBadge(value) {
     if (!badge) {
       badge = document.createElement('div');
-      badge.style.cssText = 'position:fixed;right:10px;bottom:10px;z-index:2147483647;padding:4px 10px;border-radius:7px;pointer-events:none;font:11px/1.5 -apple-system,"Hiragino Sans",sans-serif;background:rgba(35,38,52,.94);color:#c6d0f5;box-shadow:0 2px 10px rgba(0,0,0,.4)';
+      badge.style.cssText = 'position:fixed;right:10px;bottom:10px;z-index:2147483647;padding:4px 10px;border-radius:7px;pointer-events:none;font:11px/1.5 -apple-system,"Hiragino Sans",sans-serif;background:__ARMATURE_BADGE__;color:__ARMATURE_BADGE_INK__;box-shadow:0 2px 10px rgba(0,0,0,.4)';
       document.documentElement.appendChild(badge);
     }
     badge.textContent = value || ''; badge.style.display = value ? '' : 'none';
@@ -1849,10 +1852,26 @@ fn page_script(source: &Source, hush: bool) -> String {
     let links = local_link_script(source);
     if source.translates() {
         let sites = translation_sites_script();
-        format!("{SAY}{PAGE_SURFACE}{SWIPE}{ad_block}{KEYS}{HINTS}{hush}{sites}{}", translation_script())
+        themed(&format!("{SAY}{PAGE_SURFACE}{SWIPE}{ad_block}{KEYS}{HINTS}{hush}{sites}{}", translation_script()))
     } else {
-        format!("{SAY}{PAGE_SURFACE}{SWIPE}{ad_block}{KEYS}{HINTS}{hush}{links}")
+        themed(&format!("{SAY}{PAGE_SURFACE}{SWIPE}{ad_block}{KEYS}{HINTS}{hush}{links}"))
     }
+}
+
+/// 頁に仕込む仕掛けの色を、いまの配色で埋める(紙面の地・リンクの札・訳の札)。
+/// 配色を替えたあとは、新しく開いた頁から効く。
+fn themed(script: &str) -> String {
+    let crust = palette::crust();
+    let byte = |value: f32| (value.clamp(0.0, 1.0) * 255.0).round() as u8;
+    script
+        .replace("__ARMATURE_SCREEN__", &css_color(palette::surface_window()))
+        .replace("__ARMATURE_HINT__", &css_color(palette::yellow()))
+        .replace("__ARMATURE_HINT_INK__", &css_color(crust))
+        .replace(
+            "__ARMATURE_BADGE__",
+            &format!("rgba({},{},{},.94)", byte(crust.r), byte(crust.g), byte(crust.b)),
+        )
+        .replace("__ARMATURE_BADGE_INK__", &css_color(palette::text_primary()))
 }
 
 /// WebView を1枚組む。開く口(`open_with`)と起こす口(`wake`)の共通部分で、
@@ -3682,10 +3701,14 @@ fn plain_text_html(source: &str, title: &str, truncated: bool) -> String {
     };
     format!(
         r#"<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>{}</title>
-<style>:root{{color-scheme:dark}}html,body{{background:#303446;color:#c6d0f5}}body{{margin:0;padding:24px}}h1{{font:600 14px -apple-system,sans-serif;color:#e5c890;margin:0 0 16px}}.notice{{font:12px -apple-system,sans-serif;color:#eebebe}}pre{{font:13px/1.65 "Moralerspace Argon Cockpit",ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere;margin:0}}</style></head><body><h1>{}</h1>{notice}<pre>{}</pre></body></html>"#,
+<style>:root{{color-scheme:dark}}html,body{{background:{screen};color:{text}}}body{{margin:0;padding:24px}}h1{{font:600 14px -apple-system,sans-serif;color:{title};margin:0 0 16px}}.notice{{font:12px -apple-system,sans-serif;color:{notice_ink}}}pre{{font:13px/1.65 "Moralerspace Argon Cockpit",ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere;margin:0}}</style></head><body><h1>{}</h1>{notice}<pre>{}</pre></body></html>"#,
         html_escape(title),
         html_escape(title),
         html_escape(source),
+        screen = css_color(palette::surface_window()),
+        text = css_color(palette::text_primary()),
+        title = css_color(palette::yellow()),
+        notice_ink = css_color(palette::flamingo()),
     )
 }
 
@@ -4083,6 +4106,21 @@ mod tests {
         );
     }
 
+    /// 頁に仕込む仕掛けの色は、いまの配色から来る(埋め残しも直書きの色も無い)。
+    #[test]
+    fn page_scripts_take_their_colors_from_the_theme() {
+        for theme in palette::Theme::ALL {
+            palette::set_test_theme(Some(theme));
+            let script = page_script(&Source::Url("https://example.com/".into()), false);
+            assert!(!script.contains("__ARMATURE_"), "{theme:?}");
+            assert!(script.contains(&css_color(palette::surface_window())), "{theme:?}");
+            assert!(script.contains(&css_color(palette::yellow())), "{theme:?}");
+            let html = plain_text_html("x", "t", false);
+            assert!(html.contains(&css_color(palette::surface_window())), "{theme:?}");
+        }
+        palette::set_test_theme(None);
+    }
+
     #[test]
     fn page_scripts_ignore_embedded_frames() {
         assert!(KEYS.contains("window.top !== window"));
@@ -4093,7 +4131,7 @@ mod tests {
     #[test]
     fn transparent_page_surface_follows_the_site_ink_brightness() {
         assert!(PAGE_SURFACE.contains("brightness(ink) < 150"));
-        assert!(PAGE_SURFACE.contains("'#f7f5ef' : '#303446'"));
+        assert!(PAGE_SURFACE.contains("'#f7f5ef' : '__ARMATURE_SCREEN__'"));
         assert!(PAGE_SURFACE.contains("['article p','main p'"));
         assert!(PAGE_SURFACE.contains("surface, 'important'"));
         assert!(PAGE_SURFACE.contains("document.body.style.setProperty('background-color'"));
