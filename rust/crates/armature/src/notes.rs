@@ -5,7 +5,7 @@
 //! and passed with `--append-system-prompt-file` to each Claude tab Armature starts; nothing is
 //! written to the user's `~/.claude`, and it only holds inside those sessions.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use armature_core::tr;
 
@@ -80,16 +80,17 @@ const PREBUILT_JA: &str = "\
 ";
 
 /// How to change a downloaded copy that carries its own source (unpacked to `{source}` on the
-/// first launch). `{name}`, `{version}`, `{source}`, `{running}` and `{repo}` are filled in.
+/// first launch). `{name}`, `{version}`, `{source}`, `{running}` and `{repo}` are filled in;
+/// `{swap}` is step 4, from [`SWAP_EN`] or [`SWAP_ELSEWHERE_EN`].
 const UNPACKED_EN: &str = "\
 ## Changing this app
 
 This copy of {name} was downloaded ready-made, and it carries its own code: the source of this version ({version}) is at `{source}`. Its `CLAUDE.md` is the map for adding or changing a panel. When the user asks to add a panel or change how the window works:
 
 1. Check the tools for building: `xcode-select -p` (Xcode Command Line Tools) and `cargo` (Rust). If one is missing, tell the user what it is and ask before installing it (`xcode-select --install`; Rust from https://rustup.rs).
-2. The first build compiles every dependency and takes several minutes; later builds only recompile what changed. If `{source}/dist/{name}.app` does not exist yet, start the build in the background right away, before reading or writing any code, so it compiles while you work: `REUSE_FROM='{running}' '{source}/scripts/make-app.sh'` (it takes tmux and the fonts from this app instead of building and downloading them).
+2. The first build compiles every dependency: it takes several minutes and puts about 1 GB in `{source}` (more as changes pile up). Later builds only recompile what changed and take well under a minute. If `{source}/dist/{name}.app` does not exist yet, tell the user that in a sentence first, then start the build in the background right away, before reading or writing any code, so it compiles while you work: `REUSE_FROM='{running}' '{source}/scripts/make-app.sh'` (it takes tmux and the fonts from this app instead of building and downloading them). A second `make-app.sh` started while it runs says so and waits for it.
 3. Edit the code, run the tests with `'{source}/scripts/test.sh'` (it shares the build with the app; `-p armature <name>` runs only some), and build with `REUSE_FROM='{running}' '{source}/scripts/make-app.sh'`.
-4. Put the build in place of this copy: `ditto '{source}/dist/{name}.app' '{running}'`. A green restart icon (circling arrows) appears at the bottom of the right column; the user clicks it (or presses ⇧⌘R) to switch. From then on the app knows where its code is.
+4. {swap}
 
 The folder has no Git history. If the user wants to follow updates, make it a Git checkout of {repo} at the tag `v{version}`, keeping their changes. `.armature-version` in the folder says which version it came from; if it is not {version}, tell the user before building.
 ";
@@ -100,12 +101,22 @@ const UNPACKED_JA: &str = "\
 この {name} は組み上がったものをダウンロードした版で、自分のコードを持っている。この版({version})のソースは `{source}` にあり、パネルの足し方・直し方の地図はそこの `CLAUDE.md`。パネルを足したい・窓の動きを変えたいと頼まれたら:
 
 1. 組む道具を確かめる: `xcode-select -p`(Xcode Command Line Tools)と `cargo`(Rust)。無いものがあれば、それが何かを利用者に伝え、入れてよいか聞いてから入れる(`xcode-select --install`、Rust は https://rustup.rs)。
-2. 初回の組み立ては依存を全部組むので数分かかる。2 回目からは変えたところだけ。`{source}/dist/{name}.app` がまだ無ければ、コードを読み書きする前に、組み立てを裏で走らせておく(作業の間に組み上がる): `REUSE_FROM='{running}' '{source}/scripts/make-app.sh'`(tmux と字体はこのアプリから写し、組まない・取り寄せない)。
+2. 初回の組み立ては依存を全部組むので数分かかり、`{source}` に約 1GB 置かれる(改造を重ねると増える)。2 回目からは変えたところだけで、1 分かからない。`{source}/dist/{name}.app` がまだ無ければ、まずそのことを利用者に一言伝え、コードを読み書きする前に、組み立てを裏で走らせておく(作業の間に組み上がる): `REUSE_FROM='{running}' '{source}/scripts/make-app.sh'`(tmux と字体はこのアプリから写し、組まない・取り寄せない)。これが走っている間に `make-app.sh` をもう一本起こすと、そう言って終わるのを待つ。
 3. コードを直し、`'{source}/scripts/test.sh'` で試験を通し(アプリと組み立てを分け合う。`-p armature <名前>` で一部だけ)、`REUSE_FROM='{running}' '{source}/scripts/make-app.sh'` で組む。
-4. 組んだものをこの版と入れ替える: `ditto '{source}/dist/{name}.app' '{running}'`。右の列の下に緑の再起動のアイコン(円を描く矢印)が出るので、利用者がそれ(または ⇧⌘R)を押すと切り替わる。以後のアプリは自分のコードの在り処を知っている。
+4. {swap}
 
 このフォルダに Git の履歴は無い。利用者が更新を追いたいなら、変更を残したまま {repo} のタグ `v{version}` の Git の checkout にする。フォルダの `.armature-version` はどの版から書き出したかを示す。{version} でなければ、組む前に利用者に伝える。
 ";
+
+/// Step 4 when the running copy can be replaced where it is.
+const SWAP_EN: &str = "Put the build in place of this copy, whole (`ditto` into an existing app would keep files the new build doesn't have): `rm -rf '{target}.new' && ditto '{source}/dist/{name}.app' '{target}.new' && rm -rf '{target}' && mv '{target}.new' '{target}'`. A green restart icon (circling arrows) appears at the bottom of the right column; the user clicks it (or presses ⇧⌘R) to switch. From then on the app knows where its code is.";
+const SWAP_JA: &str = "組んだものをこの版と丸ごと入れ替える(既にあるアプリへ `ditto` すると、新しい束に無いファイルが残る): `rm -rf '{target}.new' && ditto '{source}/dist/{name}.app' '{target}.new' && rm -rf '{target}' && mv '{target}.new' '{target}'`。右の列の下に緑の再起動のアイコン(円を描く矢印)が出るので、利用者がそれ(または ⇧⌘R)を押すと切り替わる。以後のアプリは自分のコードの在り処を知っている。";
+
+/// Step 4 when this copy can't be replaced where it runs: from the disk image, from the
+/// read-only copy macOS runs a quarantined app from (App Translocation), or from a folder this
+/// user can't write to. The build goes to Applications instead.
+const SWAP_ELSEWHERE_EN: &str = "This copy runs from `{running}`, which cannot be replaced (a disk image, a read-only copy macOS made because the app was not moved to Applications, or a folder this user can't write to). Put the build at `{target}` instead; if something is already there, ask the user before replacing it: `rm -rf '{target}.new' && ditto '{source}/dist/{name}.app' '{target}.new' && rm -rf '{target}' && mv '{target}.new' '{target}'`. No restart icon appears: tell the user the new {name} is at `{target}`, and that they quit this one (⌘Q; their Claude sessions keep running) and open that one from then on. From then on the app knows where its code is.";
+const SWAP_ELSEWHERE_JA: &str = "この版は `{running}` から動いていて、そこは置き換えられない(ディスクイメージの中か、アプリを Applications に移さずに開いたので macOS が作った読み取り専用の写しか、この利用者には書けないフォルダ)。代わりに `{target}` へ置く。そこに既に何かあれば、置き換える前に利用者に聞く: `rm -rf '{target}.new' && ditto '{source}/dist/{name}.app' '{target}.new' && rm -rf '{target}' && mv '{target}.new' '{target}'`。再起動のアイコンは出ない。新しい {name} が `{target}` にあること、この版を終了して(⌘Q。Claude のセッションは走り続ける)以後はそちらを開くことを利用者に伝える。以後のアプリは自分のコードの在り処を知っている。";
 
 /// This app's version (the source a downloaded copy carries is of this version).
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -158,13 +169,56 @@ pub fn unpack_source() {
     let _ = std::fs::remove_dir_all(&partial);
 }
 
-fn unpacked_part(running: &std::path::Path) -> String {
+fn unpacked_part(running: &Path) -> String {
+    let target = swap_target(running, &|dir| writable(dir), &home());
+    let swap = if target == running {
+        tr!(SWAP_EN, SWAP_JA)
+    } else {
+        tr!(SWAP_ELSEWHERE_EN, SWAP_ELSEWHERE_JA)
+    };
     tr!(UNPACKED_EN, UNPACKED_JA)
+        .replace("{swap}", swap)
+        .replace("{target}", &target.to_string_lossy())
         .replace("{name}", armature_core::paths::name())
         .replace("{version}", VERSION)
         .replace("{source}", &unpacked_source_dir().to_string_lossy())
         .replace("{running}", &running.to_string_lossy())
         .replace("{repo}", REPOSITORY)
+}
+
+fn home() -> PathBuf {
+    std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default()
+}
+
+/// Whether this process may write into `dir` (false on a read-only volume, like a disk image).
+fn writable(dir: &Path) -> bool {
+    use std::os::unix::ffi::OsStrExt;
+    let Ok(dir) = std::ffi::CString::new(dir.as_os_str().as_bytes()) else {
+        return false;
+    };
+    // SAFETY: a NUL-terminated path.
+    unsafe { libc::access(dir.as_ptr(), libc::W_OK) == 0 }
+}
+
+/// The read-only copy macOS runs a quarantined app from when it was not moved (App Translocation).
+fn translocated(running: &Path) -> bool {
+    running.to_string_lossy().contains("/AppTranslocation/")
+}
+
+/// Where a build goes in place of this copy: the running app when its folder can be written
+/// (and it isn't translocated), otherwise `/Applications/<name>.app`, or
+/// `~/Applications/<name>.app` when Applications can't be written.
+fn swap_target(running: &Path, writable: &dyn Fn(&Path) -> bool, home: &Path) -> PathBuf {
+    if !translocated(running) && running.parent().is_some_and(writable) {
+        return running.to_path_buf();
+    }
+    let app = format!("{}.app", armature_core::paths::name());
+    let applications = Path::new("/Applications");
+    if writable(applications) {
+        applications.join(app)
+    } else {
+        home.join("Applications").join(app)
+    }
 }
 
 /// The app bundle this process runs from.
@@ -322,18 +376,56 @@ mod tests {
     #[test]
     fn a_downloaded_copy_with_its_source_says_where_it_is_and_how_to_swap_the_build_in() {
         for text in [UNPACKED_EN, UNPACKED_JA] {
-            for key in ["{name}", "{version}", "{source}", "{running}", "{repo}"] {
+            for key in ["{name}", "{version}", "{source}", "{running}", "{repo}", "{swap}"] {
                 assert!(text.contains(key), "{key} is not used");
             }
             assert!(text.contains("xcode-select --install") && text.contains("rustup.rs"));
-            assert!(text.contains("ditto '{source}/dist/{name}.app' '{running}'"));
             assert!(text.contains("make-app.sh"));
             assert!(text.contains("REUSE_FROM='{running}'") && text.contains("scripts/test.sh"));
+            // Before the first build, the user hears what it costs.
+            assert!(text.contains("{source}/dist/{name}.app"));
+            assert!(text.contains("1 GB") || text.contains("1GB"));
+        }
+        for text in [SWAP_EN, SWAP_JA, SWAP_ELSEWHERE_EN, SWAP_ELSEWHERE_JA] {
+            // Replaced whole: nothing of the old app is left in the new one.
+            assert!(text.contains(
+                "rm -rf '{target}.new' && ditto '{source}/dist/{name}.app' '{target}.new' && rm -rf '{target}' && mv '{target}.new' '{target}'"
+            ));
+        }
+        for text in [SWAP_ELSEWHERE_EN, SWAP_ELSEWHERE_JA] {
+            assert!(text.contains("`{running}`") && text.contains("`{target}`"), "names both places");
+            assert!(text.contains("⌘Q"), "tells the user to switch by hand");
         }
         let _en = armature_core::lang::scoped(armature_core::lang::Lang::En);
-        let text = unpacked_part(std::path::Path::new("/Applications/Armature.app"));
-        assert!(text.contains("'/Applications/Armature.app'"));
+        let text = unpacked_part(Path::new("/Applications/Armature.app"));
         assert!(text.contains(&format!("v{VERSION}")));
+        assert!(!text.contains('{'), "every placeholder is filled: {text}");
+    }
+
+    #[test]
+    fn a_copy_that_runs_from_a_read_only_place_swaps_into_applications() {
+        let home = Path::new("/Users/me");
+        let all = |_: &Path| true;
+        let none = |_: &Path| false;
+        let not_volumes = |dir: &Path| !dir.starts_with("/Volumes");
+        let installed = Path::new("/Applications/Armature.app");
+        assert_eq!(swap_target(installed, &all, home), installed, "in place");
+        let dmg = Path::new("/Volumes/Armature/Armature.app");
+        assert_eq!(swap_target(dmg, &not_volumes, home), installed);
+        let moved = Path::new(
+            "/private/var/folders/ab/xyz/T/AppTranslocation/0F1E-2D3C/d/Armature.app",
+        );
+        assert_eq!(swap_target(moved, &all, home), installed, "translocated, even if it looks writable");
+        assert!(translocated(moved) && !translocated(installed));
+        assert_eq!(
+            swap_target(dmg, &none, home),
+            Path::new("/Users/me/Applications/Armature.app"),
+            "Applications can't be written: the user's own"
+        );
+        let _en = armature_core::lang::scoped(armature_core::lang::Lang::En);
+        let text = unpacked_part(Path::new("/nonexistent-volume/Armature.app"));
+        assert!(text.contains("cannot be replaced"), "{text}");
+        assert!(!text.contains("'/nonexistent-volume/Armature.app.new'"), "not copied onto itself: {text}");
         assert!(!text.contains('{'), "every placeholder is filled: {text}");
     }
 

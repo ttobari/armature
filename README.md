@@ -39,7 +39,10 @@ ways end in the same place: the app in Applications, with its code on your Mac.
 **Download:** [the latest release](https://github.com/ttobari/armature/releases/latest) — signed
 and notarized. Open the DMG and drag Armature to Applications. It runs as it is; on the first
 launch it puts its own source in `~/Armature/source`. When you ask Claude to change the app, it
-edits that source, builds it, and puts the build in place of the downloaded one.
+edits that source, builds it, and puts the build in place of the downloaded one. The first change
+takes several minutes, because that build compiles every dependency, and puts about 1 GB in
+`~/Armature/source` (more as changes pile up); later changes only recompile what changed and
+take well under a minute. Delete `~/Armature/source/rust/target` to get the space back.
 
 **From source:** install the Xcode Command Line Tools (`xcode-select --install`; they bring
 `git`) and [Rust](https://rustup.rs), then

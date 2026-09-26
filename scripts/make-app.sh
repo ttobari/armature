@@ -42,6 +42,19 @@ if [ "$SIGN_ID" != "-" ] && ! git -C "$ROOT" diff --quiet HEAD --; then
     echo "コミットしていない変更がある: 配布用の束に入れるソースと組む中身が食い違う" >&2
     exit 1
 fi
+# 同じ置き場(DIST)へ組む make-app.sh は一度に一本。cargo の錠が守るのは 1. の組み立てだけで、
+# 束を組む 3. から先は錠の外にあり、二本が同じ束を消し合う(Claude が裏で走らせた初回の
+# 組み立てと、直してから走らせる組み立てが重なりうる。src/notes.rs)。後から来た方は待つ。
+mkdir -p "$DIST"
+MAKE_APP_LOCK="$DIST/.make-app.lock"
+if [ "${ARMATURE_MAKE_APP_LOCK:-}" != "$MAKE_APP_LOCK" ]; then
+    ARMATURE_MAKE_APP_LOCK="$MAKE_APP_LOCK"
+    export ARMATURE_MAKE_APP_LOCK
+    if ! /usr/bin/lockf -k -s -t 0 "$MAKE_APP_LOCK" true; then
+        echo "$DIST へ組む make-app.sh がほかに走っている。終わるのを待ってから組む" >&2
+    fi
+    exec /usr/bin/lockf -k "$MAKE_APP_LOCK" /bin/sh "$0" "$@"
+fi
 ICON="${ICON:-$RUST/crates/armature/assets/Cockpit.icon}"
 CARGO_BIN="${CARGO_BIN:-$(command -v cargo || echo "$HOME/.cargo/bin/cargo")}"
 
@@ -84,18 +97,20 @@ if ! current_tmux "$TMUX_HELPER"; then
     fi
 fi
 
-# 3. 束を組み直す(dist の中だけ。毎回まっさらから)。
-rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Frameworks" "$APP/Contents/Helpers" \
-    "$APP/Contents/Resources/fonts" "$APP/Contents/Resources/licenses"
-cp "$BIN" "$APP/Contents/MacOS/$BINARY_NAME"
+# 3. 束を組み直す(dist の中だけ。毎回まっさらから)。脇の置き場で組み、全部済んでから
+#    $APP と入れ替える——途中で落ちても、組みかけの束が $APP に残らない。
+STAGE="$DIST/.building/$APP_NAME.app"
+rm -rf "$STAGE"
+mkdir -p "$STAGE/Contents/MacOS" "$STAGE/Contents/Frameworks" "$STAGE/Contents/Helpers" \
+    "$STAGE/Contents/Resources/fonts" "$STAGE/Contents/Resources/licenses"
+cp "$BIN" "$STAGE/Contents/MacOS/$BINARY_NAME"
 # 組む途中の置き場を指す rpath を外す(束の中の Frameworks だけを見る)。
-otool -l "$APP/Contents/MacOS/$BINARY_NAME" | awk '/LC_RPATH/{getline; getline; print $2}' |
+otool -l "$STAGE/Contents/MacOS/$BINARY_NAME" | awk '/LC_RPATH/{getline; getline; print $2}' |
     grep -v '^@' | while read -r stale; do
-        install_name_tool -delete_rpath "$stale" "$APP/Contents/MacOS/$BINARY_NAME"
+        install_name_tool -delete_rpath "$stale" "$STAGE/Contents/MacOS/$BINARY_NAME"
     done
-cp "$BRIDGE" "$APP/Contents/Frameworks/"
-cp "$TMUX_HELPER" "$APP/Contents/Helpers/tmux"
+cp "$BRIDGE" "$STAGE/Contents/Frameworks/"
+cp "$TMUX_HELPER" "$STAGE/Contents/Helpers/tmux"
 
 # 4. 書体(どれも SIL OFL 1.1)。決まった版を公式の配布から取り寄せて照合したもの
 #    (dist/fonts)だけを入れる。組む機体に入っている別の版は使わない。
@@ -111,20 +126,20 @@ fi
 "$HERE/fetch-fonts.sh" >/dev/null
 for font in $FONTS; do
     [ -f "$ROOT/dist/fonts/$font" ] || { echo "書体が無い: $font" >&2; exit 1; }
-    cp "$ROOT/dist/fonts/$font" "$APP/Contents/Resources/fonts/"
+    cp "$ROOT/dist/fonts/$font" "$STAGE/Contents/Resources/fonts/"
 done
-cp "$ROOT/dist/fonts/VERSIONS" "$APP/Contents/Resources/fonts/"
+cp "$ROOT/dist/fonts/VERSIONS" "$STAGE/Contents/Resources/fonts/"
 
 # 4.5 初回に開く「はじめに」の頁。
-cp "$CRATE/assets/welcome.html" "$APP/Contents/Resources/welcome.html"
+cp "$CRATE/assets/welcome.html" "$STAGE/Contents/Resources/welcome.html"
 
 # 5. 第三者の許諾文。Rust の標準ライブラリの分は、組んだ toolchain に付いてくるものを写す。
-cp "$ROOT/licenses/"* "$APP/Contents/Resources/licenses/"
+cp "$ROOT/licenses/"* "$STAGE/Contents/Resources/licenses/"
 RUSTC_BIN="$(dirname "$CARGO_BIN")/rustc"
 [ -x "$RUSTC_BIN" ] || RUSTC_BIN=rustc
 STD_LICENSE="$("$RUSTC_BIN" --print sysroot)/share/doc/rust/COPYRIGHT-library.html"
 if [ -f "$STD_LICENSE" ]; then
-    cp "$STD_LICENSE" "$APP/Contents/Resources/licenses/rust-std-COPYRIGHT.html"
+    cp "$STD_LICENSE" "$STAGE/Contents/Resources/licenses/rust-std-COPYRIGHT.html"
 else
     echo "Rust の標準ライブラリの許諾文が無い: $STD_LICENSE" >&2
     exit 1
@@ -145,8 +160,8 @@ if [ -n "$ICON_BUNDLE" ] && [ -d "$ICON_BUNDLE" ] && xcrun --find actool >/dev/n
     xcrun actool "$ICON_BUNDLE" --compile "$ICON_OUT" --platform macosx \
         --minimum-deployment-target 15.0 --app-icon "$ICON_ASSET" \
         --output-partial-info-plist "$ICON_OUT/partial.plist" >/dev/null
-    cp "$ICON_OUT/Assets.car" "$APP/Contents/Resources/Assets.car"
-    cp "$ICON_OUT/$ICON_ASSET.icns" "$APP/Contents/Resources/cockpit.icns"
+    cp "$ICON_OUT/Assets.car" "$STAGE/Contents/Resources/Assets.car"
+    cp "$ICON_OUT/$ICON_ASSET.icns" "$STAGE/Contents/Resources/cockpit.icns"
     ICON_PLIST="<key>CFBundleIconName</key><string>$ICON_ASSET</string>"
 else
     ICONSET="${TMPDIR:-/tmp}"
@@ -156,11 +171,11 @@ else
         sips -z $size $size "$ICON_PNG" --out "$ICONSET/icon_${size}x${size}.png" >/dev/null
         sips -z $((size * 2)) $((size * 2)) "$ICON_PNG" --out "$ICONSET/icon_${size}x${size}@2x.png" >/dev/null
     done
-    iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/cockpit.icns"
+    iconutil -c icns "$ICONSET" -o "$STAGE/Contents/Resources/cockpit.icns"
 fi
 
 # 7. Info.plist。カメラ・マイクの説明は WebKit が mediaDevices を生やす条件。
-cat > "$APP/Contents/Info.plist" <<PLIST
+cat > "$STAGE/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -189,8 +204,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 # 許可を求める窓の説明文。既定は上の英語、日本語の Mac では ja.lproj の文が出る。
-mkdir -p "$APP/Contents/Resources/ja.lproj"
-cat > "$APP/Contents/Resources/ja.lproj/InfoPlist.strings" <<'STRINGS'
+mkdir -p "$STAGE/Contents/Resources/ja.lproj"
+cat > "$STAGE/Contents/Resources/ja.lproj/InfoPlist.strings" <<'STRINGS'
 "NSAppleEventsUsageDescription" = "音楽のパネル(Apple Music)と、Claude Code が許可されたアプリを操作するときに使います。";
 "NSDesktopFolderUsageDescription" = "Claude Code が依頼されたファイルを扱うときに使います。";
 "NSDocumentsFolderUsageDescription" = "Claude Code が依頼されたファイルを扱うときに使います。";
@@ -198,9 +213,9 @@ cat > "$APP/Contents/Resources/ja.lproj/InfoPlist.strings" <<'STRINGS'
 "NSCameraUsageDescription" = "Web ページのビデオ通話でカメラを使います。";
 "NSMicrophoneUsageDescription" = "Web ページの通話でマイクを使います。";
 STRINGS
-/usr/bin/plutil -lint "$APP/Contents/Resources/ja.lproj/InfoPlist.strings" >/dev/null
-/usr/bin/plutil -lint "$APP/Contents/Info.plist" >/dev/null
-printf 'APPL????' > "$APP/Contents/PkgInfo"
+/usr/bin/plutil -lint "$STAGE/Contents/Resources/ja.lproj/InfoPlist.strings" >/dev/null
+/usr/bin/plutil -lint "$STAGE/Contents/Info.plist" >/dev/null
+printf 'APPL????' > "$STAGE/Contents/PkgInfo"
 
 # 7b. ソースの在り処と組み直しの命令。窓の中の Claude がこの窓を作り替えられるように
 #     (`src/notes.rs` が読んで約束の文に書き足す)。**配布用の束には書かない**——組んだ
@@ -217,16 +232,16 @@ if [ "$SIGN_ID" = "-" ]; then
             "$(quote "$MANIFEST")" "$(quote "$PACKAGE")" "$(quote "$BINARY_NAME")" \
             "$(quote "$APP_NAME")" "$(quote "$BUNDLE_ID")" "$(quote "$DIST")" "$(quote "$ICON")" \
             "$(quote "$ROOT/scripts/make-app.sh")"
-    } > "$APP/Contents/Resources/source.txt"
+    } > "$STAGE/Contents/Resources/source.txt"
 else
     # 配布用の束は、その版のソースを丸ごと持つ(初回に ~/Armature/source へ書き出す・
     # `src/notes.rs`)。中身は組んだ木と同じ(コミットしていない変更は冒頭で止めてある)。
-    git -C "$ROOT" archive --format=tar.gz HEAD > "$APP/Contents/Resources/source.tar.gz"
+    git -C "$ROOT" archive --format=tar.gz HEAD > "$STAGE/Contents/Resources/source.tar.gz"
 fi
 
 # 7c. 束の中の Mach-O が、最低 OS(15.0)に無い C の関数を弱リンクで呼んでいないこと。
 #     組む機体の SDK が新しいと、古い macOS で起動直後に落ちる物ができる(scripts/check-min-os.sh)。
-"$HERE/check-min-os.sh" "$APP"
+"$HERE/check-min-os.sh" "$STAGE"
 
 # 8. 署名。中身から外へ。配布用(Developer ID)のときは hardened runtime と時刻印を付ける。
 sign() {
@@ -236,14 +251,17 @@ sign() {
         codesign --force --timestamp --options runtime --sign "$SIGN_ID" "$@"
     fi
 }
-sign "$APP/Contents/Frameworks/libCockpitTranslation.dylib"
-sign "$APP/Contents/Helpers/tmux"
+sign "$STAGE/Contents/Frameworks/libCockpitTranslation.dylib"
+sign "$STAGE/Contents/Helpers/tmux"
 if [ "$SIGN_ID" = "-" ]; then
-    sign --identifier "$BUNDLE_ID" "$APP"
+    sign --identifier "$BUNDLE_ID" "$STAGE"
 else
     # 配布用は hardened runtime なので、Music の操作・カメラ・マイクの権利を明示する。
-    sign --entitlements "$HERE/entitlements.plist" --identifier "$BUNDLE_ID" "$APP"
+    sign --entitlements "$HERE/entitlements.plist" --identifier "$BUNDLE_ID" "$STAGE"
 fi
-codesign --verify --strict "$APP"
+codesign --verify --strict "$STAGE"
 
+rm -rf "$APP"
+mv "$STAGE" "$APP"
+rmdir "$DIST/.building" 2>/dev/null || true
 echo "$APP"
