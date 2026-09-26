@@ -6,7 +6,7 @@ for you.
 Free and open source (MIT). Use it as it is, or treat it as a starting point: hand it to your AI
 assistant and have it shape your own Claude Code workspace from here — that is what it is made for.
 
-![Armature: Claude Code in the center, browser tabs on the left, clock and tasks on the right](docs/screenshot.png)
+![Armature in full screen: Claude Code in the center, browser tabs and running Claude sessions on the left, clock and tasks on the right](docs/screenshot.png)
 
 > **0.1** — an early release: expect rough edges and changes.
 
