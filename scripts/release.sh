@@ -40,7 +40,8 @@ cp -R "$APP" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
 hdiutil create -volname "$APP_NAME" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
 rm -rf "$STAGE"
-codesign --force --timestamp --sign "$SIGN_ID" "$DMG"
+BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Contents/Info.plist")
+codesign --force --timestamp --identifier "$BUNDLE_ID.dmg" --sign "$SIGN_ID" "$DMG"
 
 # 3. 公証(数分かかる)→ 貼り付け。
 xcrun notarytool submit "$DMG" --key "$ASC_KEY_PATH" --key-id "$ASC_KEY_ID" \

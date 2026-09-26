@@ -2,6 +2,10 @@
 name = "armature"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
+# Not on crates.io: the names `armature` and `armature-core` there are other projects.
+publish = false
 rust-version = "1.92"
 
 # The app is the library; the binary only runs it. A build with panels of your own depends on
@@ -55,11 +59,14 @@ objc2-app-kit = { version = "0.3", features = [
     "NSView",
     "NSWindow",
 ] }
-objc2-foundation = { version = "0.3", features = ["NSArray", "NSGeometry", "NSLocale", "NSString", "NSURL", "NSURLRequest"] }
+objc2-foundation = { version = "0.3", features = ["NSArray", "NSError", "NSGeometry", "NSLocale", "NSString", "NSURL", "NSURLRequest"] }
 # ブラウザの伝言の受け口(browser.rs の IpcReceiver)。送り主の枠が主フレームかを WebKit に訊く。
+# ⇧T の焦点の確かめは、頁と別の世界(WKContentWorld)で JS を走らせる。
 objc2-web-kit = { version = "0.3", default-features = false, features = [
     "std",
+    "block2",
     "objc2-app-kit",
+    "WKContentWorld",
     "WKFrameInfo",
     "WKScriptMessage",
     "WKScriptMessageHandler",

@@ -20,10 +20,30 @@ use std::thread;
 /// 失って空欄のままになる。窓の中で起きるものは新しい1本であって、窓を起こした
 /// 誰かの続きではない。
 ///
-/// 落とすのは前置き `CLAUDE_CODE_` の全部と、ここに並べた名指しの数個。
-/// `ANTHROPIC_*` や `CLAUDE_CONFIG_DIR` のような**設定**には触らない
-/// ——あれは利用者の環境の一部で、子も同じものを読んでよい。
+/// 落とすのは前置き `CLAUDE_CODE_` の全部と、ここに並べた名指しの数個。印は版ごとに
+/// 増えるので前置きで落とし、同じ前置きを持つ**設定**([`CLAUDE_CODE_SETTINGS`])は残す。
+/// `ANTHROPIC_*` や `CLAUDE_CONFIG_DIR` のような設定にも触らない——あれは利用者の
+/// 環境の一部で、子も同じものを読んでよい。
 const INHERITED_MARKERS: [&str; 4] = ["CLAUDECODE", "CLAUDE_PID", "CLAUDE_EFFORT", "AI_AGENT"];
+
+/// `CLAUDE_CODE_` で始まるが、利用者が選ぶ設定(使う窓口・認証・通信・出力の上限)。
+/// 落とすと Bedrock や Vertex の指定が黙って外れ、別の窓口で動いてしまう。
+const CLAUDE_CODE_SETTINGS: [&str; 14] = [
+    "CLAUDE_CODE_USE_BEDROCK",
+    "CLAUDE_CODE_USE_VERTEX",
+    "CLAUDE_CODE_USE_FOUNDRY",
+    "CLAUDE_CODE_SKIP_BEDROCK_AUTH",
+    "CLAUDE_CODE_SKIP_VERTEX_AUTH",
+    "CLAUDE_CODE_SKIP_FOUNDRY_AUTH",
+    "CLAUDE_CODE_OAUTH_TOKEN",
+    "CLAUDE_CODE_API_KEY_HELPER_TTL_MS",
+    "CLAUDE_CODE_CLIENT_CERT",
+    "CLAUDE_CODE_CLIENT_KEY",
+    "CLAUDE_CODE_CLIENT_KEY_PASSPHRASE",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+    "CLAUDE_CODE_SHELL_PREFIX",
+    "CLAUDE_CODE_MAX_OUTPUT_TOKENS",
+];
 
 /// locale が無いまま起きたときに使う既定。値そのものより UTF-8 であることが要る。
 pub const DEFAULT_LOCALE: &str = "en_US.UTF-8";
@@ -31,7 +51,8 @@ pub const DEFAULT_LOCALE: &str = "en_US.UTF-8";
 /// 落とす対象か。子の env と tmux サーバの env を同じ物差しで測る。
 #[must_use]
 pub fn is_inherited_marker(key: &str) -> bool {
-    key.starts_with("CLAUDE_CODE_") || INHERITED_MARKERS.contains(&key)
+    (key.starts_with("CLAUDE_CODE_") && !CLAUDE_CODE_SETTINGS.contains(&key))
+        || INHERITED_MARKERS.contains(&key)
 }
 
 /// 子プロセスに渡す環境の差分。
@@ -187,6 +208,8 @@ mod tests {
             ("CLAUDECODE", "1"),
             ("CLAUDE_CONFIG_DIR", "/tmp/claude"),
             ("ANTHROPIC_MODEL", "x"),
+            ("CLAUDE_CODE_USE_BEDROCK", "1"),
+            ("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1"),
         ]));
         for gone in ["CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_SESSION_ID", "CLAUDECODE", "NO_COLOR"] {
             assert!(env.remove.iter().any(|key| key == gone), "{gone} が残る");
@@ -194,6 +217,9 @@ mod tests {
         // 設定は利用者の環境の一部。落としてはいけない側。
         assert!(!env.remove.iter().any(|key| key == "CLAUDE_CONFIG_DIR"));
         assert!(!env.remove.iter().any(|key| key == "ANTHROPIC_MODEL"));
+        // 同じ前置きでも、窓口や通信を選ぶ設定は残す。
+        assert!(!env.remove.iter().any(|key| key == "CLAUDE_CODE_USE_BEDROCK"));
+        assert!(!env.remove.iter().any(|key| key == "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"));
     }
 
     #[test]

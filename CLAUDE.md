@@ -217,7 +217,7 @@ written in the current language.
   locale and the colors for the child only.
 - A panel that needs a macOS permission (camera, controlling Music …) needs its usage text in the
   Info.plist written by `scripts/make-app.sh`.
-- Run `cargo test --workspace` before you're done.
+- Run `cargo test --manifest-path rust/Cargo.toml --workspace` before you're done.
 
 ## Building
 

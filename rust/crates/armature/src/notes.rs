@@ -60,7 +60,11 @@ const COPY_EN: &str = " This window runs from `{running}`, not from where the bu
 const COPY_JA: &str = " この窓は組んだ先(`{built}`)ではなく `{running}` から動いている。組み直したら `ditto '{built}' '{running}'` で上書きすると札が出る。";
 
 /// Where Armature's code lives, for a copy that was downloaded rather than built on this Mac.
-const REPOSITORY: &str = "https://github.com/ttobari/armature";
+/// A fork that hands out its own signed build sets `ARMATURE_REPOSITORY` when building it.
+const REPOSITORY: &str = match option_env!("ARMATURE_REPOSITORY") {
+    Some(url) => url,
+    None => "https://github.com/ttobari/armature",
+};
 
 /// How to change a downloaded copy: there is no code on this Mac, so start from the repository.
 const PREBUILT_EN: &str = "\

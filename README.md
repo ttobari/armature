@@ -13,8 +13,8 @@ assistant and have it shape your own Claude Code workspace from here.
 ## What it is
 
 - **Claude Code in the center**, in full-screen mode. `⌘T` starts a Claude session, `⌘J` a plain
-  terminal. Sessions keep running when you close the window (Armature brings its own tmux, inside
-  the app).
+  terminal. Sessions keep running when you close or quit Armature (it brings its own tmux,
+  inside the app).
 - **Panels on the sides:** running sessions, browser tabs, clock, tasks — and a calendar and a
   music player you can turn on. Which panels show, and where, is one file: `~/Armature/panels.conf`.
 - **Tasks are Markdown files** in `~/Armature/tasks/`. Ask Claude to add one; select it and press
@@ -25,9 +25,15 @@ assistant and have it shape your own Claude Code workspace from here.
 
 ## Download
 
-[Armature-0.1.0.dmg](https://github.com/ttobari/armature/releases/latest) — signed and notarized.
-Open it and drag Armature to Applications. You need macOS 15 or later on Apple silicon, and Claude
-Code with a plan that includes it.
+[The latest release](https://github.com/ttobari/armature/releases/latest) — signed and notarized.
+Open the DMG and drag Armature to Applications. You need macOS 15 or later on Apple silicon, and
+Claude Code with a plan that includes it.
+
+- To stop the sessions that keep running: `/Applications/Armature.app/Contents/Helpers/tmux -L armature kill-server`
+- Armature keeps its files in `~/Armature` and `~/Library/Application Support/armature`; delete
+  them with the app to remove it.
+- Claude tabs don't see what your `~/.zshrc` exports: put Claude Code's settings in the `env` of
+  `~/.claude/settings.json`.
 
 ## Build
 
@@ -55,4 +61,5 @@ own that depends on `armature` over editing this one, and run the tests before y
 ## License
 
 MIT. Third-party licenses (tmux, libevent, utf8proc, the typefaces, the Rust crates) are in
-`licenses/` and inside the app.
+`licenses/` and inside the app. Not affiliated with Anthropic; Claude and Claude Code are
+trademarks of Anthropic.

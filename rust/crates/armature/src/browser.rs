@@ -193,10 +193,23 @@ static NEXT_BOOKMARK_WRITE: AtomicU64 = AtomicU64::new(1);
 /// 頁を見ている間に利用者が最後に鍵を押した時刻(native の監視が書く)。外の頁が
 /// 新しいタブを開けるのは、この直後の 1 回だけ(リンクの札を ⇧ で選んだとき)。
 static KEY_DOWN_AT: Mutex<Option<std::time::Instant>> = Mutex::new(None);
-/// ⇧T で精訳を頼まれたタブと、残りの束の数。頁の JS は本文を 20 塊ずつ送るので、
-/// 1 回の ⇧T で頁 1 枚ぶん(最大 400 塊)まで通す。
-static CLAUDE_ARM: Mutex<Option<(u64, u32)>> = Mutex::new(None);
+/// ⇧T で精訳を頼まれたタブと、残りの束の数と、次の束を受ける期限。頁の JS は本文を
+/// 20 塊ずつ送るので、1 回の ⇧T で頁 1 枚ぶん(最大 400 塊)まで通す。
+static CLAUDE_ARM: Mutex<Option<ClaudeArm>> = Mutex::new(None);
 const CLAUDE_ARM_BATCHES: u32 = 20;
+/// ⇧T から最初の束が届くまでの猶予。器が頁の訳を起こすので、すぐ届く。
+const CLAUDE_ARM_START: std::time::Duration = std::time::Duration::from_secs(10);
+/// 束を 1 つ通したあと、次の束が届くまでの猶予。頁は返事を待ってから次を送るので、
+/// 精訳の時間切れにゆとりを足した長さ。
+const CLAUDE_ARM_NEXT: std::time::Duration =
+    armature_core::page_trans::CLAUDE_TIMEOUT.saturating_add(std::time::Duration::from_secs(30));
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ClaudeArm {
+    tab: u64,
+    left: u32,
+    until: std::time::Instant,
+}
 
 thread_local! {
     static MANAGER: RefCell<Manager> = RefCell::new(Manager::default());
@@ -368,7 +381,12 @@ pub fn install_native_shortcuts() {
                 .map(|value| value.to_string())
                 .unwrap_or_default();
             if visible {
-                note_key_down(active, asks_for_claude(&key, modifiers));
+                note_key_down();
+                if asks_for_claude(&key, modifiers)
+                    && let Some(tab) = active
+                {
+                    arm_claude_unless_typing(tab);
+                }
             }
             if visible && let Some(step) = native_history_step(&key, modifiers) {
                 step_history(step);
@@ -405,17 +423,83 @@ fn asks_for_claude(key: &str, modifiers: NativeModifiers) -> bool {
         && key.eq_ignore_ascii_case("t")
 }
 
-/// 利用者が頁の上で鍵を押したことを覚える。⇧T なら、いま見ているタブに精訳を許す。
-fn note_key_down(active: Option<u64>, claude: bool) {
+/// 利用者が頁の上で鍵を押したことを覚える。
+fn note_key_down() {
     if let Ok(mut at) = KEY_DOWN_AT.lock() {
         *at = Some(std::time::Instant::now());
     }
-    if claude
-        && let Some(id) = active
-        && let Ok(mut arm) = CLAUDE_ARM.lock()
-    {
-        *arm = Some((id, CLAUDE_ARM_BATCHES));
+}
+
+/// 焦点が字を打つ欄にあるかを調べる JS。頁の JS からは触れない別の世界で走らせるので、
+/// 頁が `document.activeElement` を偽っても効かない。枠(iframe)の中は見えないので、
+/// 焦点が枠にあれば打っている側に倒す。
+const FOCUS_PROBE: &str = "(function () {\
+  var a = document.activeElement;\
+  while (a && a.shadowRoot && a.shadowRoot.activeElement) { a = a.shadowRoot.activeElement; }\
+  if (!a) { return 'read'; }\
+  var tag = (a.tagName || '').toLowerCase();\
+  return (a.isContentEditable || tag === 'input' || tag === 'textarea' || tag === 'select' || tag === 'iframe') ? 'typing' : 'read';\
+})()";
+
+/// ⇧T。字を打っている最中でなければ、このタブに精訳を許してから頁の訳を起こす。
+///
+/// 数えるのは器の側(頁は ⇧T を偽れる)。ただし入力欄で大文字の T を打っただけで
+/// 許してはいけないので、焦点の在り処を頁と別の世界で確かめてから許す。
+#[cfg(target_os = "macos")]
+fn arm_claude_unless_typing(tab: u64) {
+    use objc2::MainThreadMarker;
+    use objc2_foundation::{NSError, NSString};
+    use objc2_web_kit::WKContentWorld;
+    use wry::WebViewExtMacOS;
+
+    let Some(mtm) = MainThreadMarker::new() else {
+        return;
+    };
+    let Some(webview) = MANAGER.with(|manager| {
+        let manager = manager.try_borrow().ok()?;
+        Some(manager.tabs.iter().find(|entry| entry.id == tab)?.live()?.webview())
+    }) else {
+        return;
+    };
+    let answer = RcBlock::new(move |result: *mut AnyObject, error: *mut NSError| {
+        // SAFETY: WebKit が窓の糸で渡す結果。文字列かどうかを確かめて読むだけ。
+        let typing = !error.is_null()
+            || unsafe { result.as_ref() }
+                .and_then(|value| value.downcast_ref::<NSString>())
+                .is_none_or(|value| value.to_string() != "read");
+        if !arm_claude(tab, typing, std::time::Instant::now()) {
+            return;
+        }
+        MANAGER.with(|manager| {
+            if let Ok(manager) = manager.try_borrow()
+                && let Some(view) = manager.tabs.iter().find(|entry| entry.id == tab).and_then(Tab::live)
+            {
+                let _ = view.evaluate_script("window.__cockpitTr && window.__cockpitTr.redo();");
+            }
+        });
+    });
+    // SAFETY: 窓の糸。頁の世界とは別の、器だけの世界で焦点を訊く。
+    unsafe {
+        let world = WKContentWorld::defaultClientWorld(mtm);
+        webview.evaluateJavaScript_inFrame_inContentWorld_completionHandler(
+            &NSString::from_str(FOCUS_PROBE),
+            None,
+            &world,
+            Some(&answer),
+        );
     }
+}
+
+/// 焦点を確かめた結果を受けて、`tab` に精訳を許す。打っている最中なら許さない。
+fn arm_claude(tab: u64, typing: bool, now: std::time::Instant) -> bool {
+    if typing {
+        return false;
+    }
+    let Ok(mut arm) = CLAUDE_ARM.lock() else {
+        return false;
+    };
+    *arm = Some(ClaudeArm { tab, left: CLAUDE_ARM_BATCHES, until: now + CLAUDE_ARM_START });
+    true
 }
 
 /// 押した直後なら 1 回だけ真。外の頁が開く新しいタブを、押した回数までに抑える。
@@ -428,14 +512,22 @@ fn take_key_down() -> bool {
     fresh
 }
 
-/// このタブに ⇧T の精訳が残っていれば 1 束ぶん使う。
+/// このタブに ⇧T の精訳が残っていれば 1 束ぶん使う。期限を過ぎた許しは捨てる。
 fn take_claude_arm(id: u64) -> bool {
+    take_claude_arm_at(id, std::time::Instant::now())
+}
+
+fn take_claude_arm_at(id: u64, now: std::time::Instant) -> bool {
     let Ok(mut arm) = CLAUDE_ARM.lock() else {
         return false;
     };
+    if arm.is_some_and(|current| now > current.until) {
+        *arm = None;
+    }
     match arm.as_mut() {
-        Some((tab, left)) if *tab == id && *left > 0 => {
-            *left -= 1;
+        Some(current) if current.tab == id && current.left > 0 => {
+            current.left -= 1;
+            current.until = now + CLAUDE_ARM_NEXT;
             true
         }
         _ => false,
@@ -1638,10 +1730,11 @@ const TRANSLATION: &str = r#"
   };
   window.addEventListener('keydown', function (event) {
     if (event.metaKey || event.ctrlKey || event.altKey || typing()) return;
+    // ⇧T(精訳)は器が焦点を確かめてから起こす。ここでは既定の動きだけ止める。
     if (event.key === 't') {
       window.__cockpitTr.toggle(); event.preventDefault();
     } else if (event.key === 'T') {
-      window.__cockpitTr.redo(); event.preventDefault();
+      event.preventDefault();
     }
   }, true);
   function observe() {
@@ -3924,17 +4017,44 @@ mod tests {
         // 精訳は ⇧T を押したタブだけ、束の数まで。
         *CLAUDE_ARM.lock().unwrap() = None;
         assert_eq!(outside_request(translate(7, true)), None);
-        note_key_down(Some(7), true);
+        // 入力欄で大文字の T を打っただけでは許さない(焦点の確かめが「打っている」)。
+        assert!(!arm_claude(7, true, std::time::Instant::now()));
+        assert_eq!(outside_request(translate(7, true)), None, "打っている最中の ⇧T");
+        assert!(arm_claude(7, false, std::time::Instant::now()));
         assert_eq!(outside_request(translate(8, true)), None, "押していないタブ");
         for _ in 0..CLAUDE_ARM_BATCHES {
             assert_eq!(outside_request(translate(7, true)), Some(translate(7, true)));
         }
         assert_eq!(outside_request(translate(7, true)), None, "1 回の ⇧T で頁 1 枚まで");
+        // 許しには期限がある。最初の束は ⇧T の直後だけ、次の束は前の束の返事の後だけ。
+        let start = std::time::Instant::now();
+        assert!(arm_claude(7, false, start));
+        assert!(!take_claude_arm_at(7, start + CLAUDE_ARM_START + std::time::Duration::from_secs(1)), "⇧T から間が空いた");
+        assert_eq!(*CLAUDE_ARM.lock().unwrap(), None, "期限切れの許しは捨てる");
+        assert!(arm_claude(7, false, start));
+        assert!(take_claude_arm_at(7, start + std::time::Duration::from_secs(1)));
+        let next = start + std::time::Duration::from_secs(1) + CLAUDE_ARM_NEXT;
+        assert!(take_claude_arm_at(7, next - std::time::Duration::from_secs(1)), "返事を待つ間は続く");
+        assert!(!take_claude_arm_at(7, next + CLAUDE_ARM_NEXT), "放っておいた許しは使えない");
+        *CLAUDE_ARM.lock().unwrap() = None;
         // 外の頁の新しいタブは、鍵を押した直後の web の頁を 1 枚だけ。
         let web = Request::NewTab("https://example.com/".into());
-        note_key_down(None, false);
+        note_key_down();
         assert_eq!(outside_request(web.clone()), Some(web.clone()));
         assert_eq!(outside_request(web), None);
+    }
+
+    /// ⇧T の焦点の確かめは、字を打つ欄と枠を「打っている」に倒す。頁の JS は ⇧T で
+    /// 精訳を自分から起こさない(器が確かめてから起こす)。
+    #[test]
+    fn shift_t_is_checked_by_the_app_not_started_by_the_page() {
+        for editable in ["isContentEditable", "'input'", "'textarea'", "'select'", "'iframe'"] {
+            assert!(FOCUS_PROBE.contains(editable), "{editable}");
+        }
+        assert!(FOCUS_PROBE.contains("'read'"));
+        let script = translation_script();
+        assert!(script.contains("event.key === 'T'"));
+        assert!(!script.contains("window.__cockpitTr.redo(); event.preventDefault();"), "頁が自分で精訳を起こしている");
     }
 
     #[cfg(target_os = "macos")]

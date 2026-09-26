@@ -125,7 +125,7 @@ dependencies = [
 
 [[package]]
 name = "armature"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "armature-core",
  "block2 0.6.2",
@@ -147,7 +147,7 @@ dependencies = [
 
 [[package]]
 name = "armature-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "jiff",
  "libc",

@@ -34,21 +34,31 @@ DIST="${DIST:-$ROOT/dist}"
 APP="$DIST/$APP_NAME.app"
 SIGN_ID="${SIGN_ID:--}"
 ICON="${ICON:-$RUST/crates/armature/assets/Cockpit.icon}"
-CARGO_BIN="${CARGO_BIN:-$HOME/.cargo/bin/cargo}"
+CARGO_BIN="${CARGO_BIN:-$(command -v cargo || echo "$HOME/.cargo/bin/cargo")}"
 
 # 1. 本体を組む。最低 OS は 15.0。組んだ機体のパス(利用者名が入る)を実体に残さない。
 #    (rustc は後に書いた置き換えを優先する。ホーム全体を先に、細かいものを後に。)
-REMAP="--remap-path-prefix=$HOME=/home --remap-path-prefix=$HOME/.cargo/registry/src=/cargo --remap-path-prefix=$HOME/.rustup=/rustup --remap-path-prefix=$ROOT=/src"
-RUSTFLAGS="$REMAP" MACOSX_DEPLOYMENT_TARGET=15.0 LANG=ja_JP.UTF-8 "$CARGO_BIN" build --release \
+#    旗は CARGO_ENCODED_RUSTFLAGS(区切りは 0x1f)で渡す。RUSTFLAGS は空白で切るので、
+#    空白を含む置き場(`~/My Projects/…`)で壊れる。
+SEP=$(printf '\037')
+REMAP="--remap-path-prefix=$HOME=/home$SEP--remap-path-prefix=$HOME/.cargo/registry/src=/cargo$SEP--remap-path-prefix=$HOME/.rustup=/rustup$SEP--remap-path-prefix=$ROOT=/src"
+# proc-macro だけ strip を切る。Rust 1.97 までの strip は proc-macro の dylib を macOS 27 が
+# 読めない形に削る(rust-lang/rust#157750。1.98.0 で直った)。束の中身は変わらない。
+CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_STRIP=false CARGO_ENCODED_RUSTFLAGS="$REMAP" \
+    MACOSX_DEPLOYMENT_TARGET=15.0 LANG=ja_JP.UTF-8 "$CARGO_BIN" build --release \
     --manifest-path "$MANIFEST" -p "$PACKAGE" --bin "$BINARY_NAME"
 BIN="$TARGET_DIR/release/$BINARY_NAME"
 BRIDGE="$TARGET_DIR/release/libCockpitTranslation.dylib"
 mkdir -p "$DIST"
 
-# 2. 同梱の tmux。Armature 本体の dist に組んだものがあれば使い回し、無ければ組む。
+# 2. 同梱の tmux。Armature 本体の dist に同じ版を組んだものがあれば使い回し、無ければ組む。
+TMUX_VERSION=$(sed -n 's/^TMUX_VERSION=//p' "$HERE/build-tmux.sh")
+current_tmux() {
+    [ -x "$1" ] && [ "$("$1" -V 2>/dev/null)" = "tmux $TMUX_VERSION" ]
+}
 TMUX_HELPER="$DIST/helpers/tmux"
-if [ ! -x "$TMUX_HELPER" ]; then
-    if [ -x "$ROOT/dist/helpers/tmux" ]; then
+if ! current_tmux "$TMUX_HELPER"; then
+    if current_tmux "$ROOT/dist/helpers/tmux"; then
         TMUX_HELPER="$ROOT/dist/helpers/tmux"
     else
         "$HERE/build-tmux.sh" "$DIST/helpers"
@@ -68,28 +78,30 @@ otool -l "$APP/Contents/MacOS/$BINARY_NAME" | awk '/LC_RPATH/{getline; getline; 
 cp "$BRIDGE" "$APP/Contents/Frameworks/"
 cp "$TMUX_HELPER" "$APP/Contents/Helpers/tmux"
 
-# 4. 書体(どれも SIL OFL 1.1)。dist/fonts → 組む機体の書体の順に探し、無ければ公式の配布から取り寄せる。
+# 4. 書体(どれも SIL OFL 1.1)。決まった版を公式の配布から取り寄せて照合したもの
+#    (dist/fonts)だけを入れる。組む機体に入っている別の版は使わない。
 FONTS="MoralerspaceArgon-Regular.ttf MoralerspaceArgon-Bold.ttf MoralerspaceArgon-Italic.ttf MoralerspaceArgon-BoldItalic.ttf JetBrainsMonoNerdFontMono-Regular.ttf"
-find_font() {
-    for dir in "$DIST/fonts" "$ROOT/dist/fonts" "$HOME/Library/Fonts" "/Library/Fonts"; do
-        if [ -f "$dir/$1" ]; then echo "$dir/$1"; return 0; fi
-    done
-    return 1
-}
+"$HERE/fetch-fonts.sh" >/dev/null
 for font in $FONTS; do
-    find_font "$font" >/dev/null || { "$HERE/fetch-fonts.sh" >/dev/null; break; }
-done
-for font in $FONTS; do
-    found=$(find_font "$font") || { echo "書体が無い: $font" >&2; exit 1; }
-    cp "$found" "$APP/Contents/Resources/fonts/"
+    [ -f "$ROOT/dist/fonts/$font" ] || { echo "書体が無い: $font" >&2; exit 1; }
+    cp "$ROOT/dist/fonts/$font" "$APP/Contents/Resources/fonts/"
 done
 
 # 4.5 初回に開く「はじめに」の頁。
 cp "$CRATE/assets/welcome.html" "$APP/Contents/Resources/welcome.html"
 cp "$CRATE/assets/welcome-ja.html" "$APP/Contents/Resources/welcome-ja.html"
 
-# 5. 第三者の許諾文。
-cp "$ROOT/licenses/"* "$APP/Contents/Resources/licenses/" 2>/dev/null || true
+# 5. 第三者の許諾文。Rust の標準ライブラリの分は、組んだ toolchain に付いてくるものを写す。
+cp "$ROOT/licenses/"* "$APP/Contents/Resources/licenses/"
+RUSTC_BIN="$(dirname "$CARGO_BIN")/rustc"
+[ -x "$RUSTC_BIN" ] || RUSTC_BIN=rustc
+STD_LICENSE="$("$RUSTC_BIN" --print sysroot)/share/doc/rust/COPYRIGHT-library.html"
+if [ -f "$STD_LICENSE" ]; then
+    cp "$STD_LICENSE" "$APP/Contents/Resources/licenses/rust-std-COPYRIGHT.html"
+else
+    echo "Rust の標準ライブラリの許諾文が無い: $STD_LICENSE" >&2
+    exit 1
+fi
 
 # 6. アイコン(新形式 .icon → Assets.car。PNG を渡されたか actool が無ければ PNG から icns)。
 ICON_PLIST=""
@@ -134,7 +146,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     $ICON_PLIST
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>$VERSION</string>
-    <key>CFBundleVersion</key><string>1</string>
+    <key>CFBundleVersion</key><string>$VERSION</string>
     <key>LSMinimumSystemVersion</key><string>15.0</string>
     <key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>
     <key>NSHighResolutionCapable</key><true/>

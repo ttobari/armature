@@ -6,15 +6,41 @@
 # どちらも SIL Open Font License 1.1(許諾文は licenses/)。
 set -eu
 
+# 版を上げるときは、下の SHA-256 も配布元の値に替える(GitHub の Release の digest)。
 MORALERSPACE_VERSION=v2.0.0
+MORALERSPACE_SHA256=56175ee16373ba1a3d2fd5ec46f3b0b6bf0412be7db1481ec7dee757f2e3d557
 NERD_FONTS_VERSION=v3.5.1
+NERD_FONTS_SHA256=04d5e8f903693f9dd13e16f867e994834e681eb3c72c0d337a770dcda09010cf
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/.." && pwd)
 OUT="$ROOT/dist/fonts"
-WORK=${TMPDIR:-/tmp}
-WORK=${WORK%/}/armature-fonts
+if [ -n "${TMPDIR:-}" ]; then
+    WORK=${TMPDIR%/}/armature-fonts
+else
+    WORK=$(mktemp -d /tmp/armature-fonts.XXXXXX)
+fi
 mkdir -p "$OUT" "$WORK"
+
+# 版が替わったら、置いてある書体を捨てて取り寄せ直す。
+STAMP="$OUT/VERSIONS"
+WANT="moralerspace=$MORALERSPACE_VERSION nerd-fonts=$NERD_FONTS_VERSION"
+if [ "$(cat "$STAMP" 2>/dev/null)" != "$WANT" ]; then
+    rm -f "$OUT"/*.ttf
+fi
+
+# 落とした物は必ず SHA-256 で確かめる。
+fetch() {
+    if [ -s "$2" ] && echo "$3  $2" | shasum -a 256 -c - >/dev/null 2>&1; then
+        return 0
+    fi
+    curl -fsSL "$1" -o "$2"
+    echo "$3  $2" | shasum -a 256 -c - >/dev/null 2>&1 || {
+        echo "$2 の SHA-256 が合わない(配布元が替わった?)" >&2
+        rm -f "$2"
+        exit 1
+    }
+}
 
 need() {
     for f in "$@"; do
@@ -26,9 +52,8 @@ need() {
 if need MoralerspaceArgon-Regular.ttf MoralerspaceArgon-Bold.ttf \
     MoralerspaceArgon-Italic.ttf MoralerspaceArgon-BoldItalic.ttf; then
     zip="$WORK/Moralerspace_$MORALERSPACE_VERSION.zip"
-    [ -s "$zip" ] || curl -fsSL \
-        "https://github.com/yuru7/moralerspace/releases/download/$MORALERSPACE_VERSION/Moralerspace_$MORALERSPACE_VERSION.zip" \
-        -o "$zip"
+    fetch "https://github.com/yuru7/moralerspace/releases/download/$MORALERSPACE_VERSION/Moralerspace_$MORALERSPACE_VERSION.zip" \
+        "$zip" "$MORALERSPACE_SHA256"
     rm -rf "$WORK/moralerspace" && mkdir -p "$WORK/moralerspace"
     unzip -q -o "$zip" '*MoralerspaceArgon-*.ttf' -d "$WORK/moralerspace"
     for style in Regular Bold Italic BoldItalic; do
@@ -40,12 +65,12 @@ fi
 
 if need JetBrainsMonoNerdFontMono-Regular.ttf; then
     tarball="$WORK/JetBrainsMono_$NERD_FONTS_VERSION.tar.xz"
-    [ -s "$tarball" ] || curl -fsSL \
-        "https://github.com/ryanoasis/nerd-fonts/releases/download/$NERD_FONTS_VERSION/JetBrainsMono.tar.xz" \
-        -o "$tarball"
+    fetch "https://github.com/ryanoasis/nerd-fonts/releases/download/$NERD_FONTS_VERSION/JetBrainsMono.tar.xz" \
+        "$tarball" "$NERD_FONTS_SHA256"
     rm -rf "$WORK/nerd" && mkdir -p "$WORK/nerd"
     tar -xJf "$tarball" -C "$WORK/nerd" JetBrainsMonoNerdFontMono-Regular.ttf
     cp "$WORK/nerd/JetBrainsMonoNerdFontMono-Regular.ttf" "$OUT/"
 fi
 
+echo "$WANT" > "$STAMP"
 ls "$OUT"
