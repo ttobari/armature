@@ -23,10 +23,16 @@ assistant and have it shape your own Claude Code workspace from here.
   Ask Claude in the window to add or change one: it knows where the code is and how to rebuild.
 - English and Japanese, six color themes (`⌘,`).
 
+## Download
+
+[Armature-0.1.0.dmg](https://github.com/ttobari/armature/releases/latest) — signed and notarized.
+Open it and drag Armature to Applications. You need macOS 15 or later on Apple silicon, and Claude
+Code with a plan that includes it.
+
 ## Build
 
-You need macOS 15 or later on Apple silicon, [Rust](https://rustup.rs), the Xcode Command Line
-Tools (`xcode-select --install`), and Claude Code with a plan that includes it.
+To change or add panels, build it yourself. Besides the above, you need
+[Rust](https://rustup.rs) and the Xcode Command Line Tools (`xcode-select --install`).
 
 ```sh
 cargo test --manifest-path rust/Cargo.toml --workspace
