@@ -2,6 +2,8 @@
 
 English | [日本語](README.ja.md)
 
+A plain, customizable workspace for working comfortably in Claude Code.
+
 Armature takes you from 0 to 1. Take it from 1 to 100 with your own Claude.
 
 It is the setup I use every day (Claude Code on tmux, inside an iced window) with everything personal taken out. Want a feature? Ask Claude in the window: it changes the app's code and rebuilds it. Free and open source (MIT).
