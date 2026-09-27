@@ -2,8 +2,6 @@
 
 [English](README.md) | 日本語
 
-Claude Code で、自分だけのアプリを育てるための土台です。
-
 0 から 1 までは Armature が用意しました。1 から 100 は、あなたの Claude と一緒に作ってください。
 
 作者が毎日使っている環境(iced のウィンドウの中で、tmux の上に Claude Code を動かすもの)から、個人的な機能をすべて外して公開しています。ほしい機能があれば、アプリの中の Claude に頼んでください。Claude がアプリのコードを書き換えて、ビルドし直します。無料のオープンソースです(MIT ライセンス)。
@@ -49,4 +47,4 @@ scripts/install.sh
 
 ## ライセンス
 
-MIT。同梱しているソフトウェアとフォントのライセンスは `licenses/` にあります。Anthropic とは関係のない個人の制作物です。Claude と Claude Code は Anthropic の商標です。
+MIT。同梱しているソフトウェアとフォントのライセンスは `licenses/` にあります。Anthropic の公式製品ではありません。
