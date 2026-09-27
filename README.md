@@ -1,5 +1,7 @@
 # Armature
 
+English | [日本語](README.ja.md)
+
 A plain Mac window around Claude Code, with panels you can replace, remove, or have Claude build
 for you.
 
