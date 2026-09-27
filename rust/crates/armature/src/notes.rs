@@ -29,10 +29,11 @@ const HEADER_JA: &str = "\
 /// How to change this window, when it was built on this Mac (`scripts/make-app.sh` writes
 /// `Resources/source.txt` into local builds, never into signed ones). `{source}`, `{repo}`,
 /// `{build}` are filled in; `{copy}` is the line about a copy that runs from elsewhere.
+/// `{sh:…}` is the same value written for inside a shell's single quotes ([`fill`]).
 const CHANGE_EN: &str = "\
 ## Changing this app
 
-This window was built on this Mac from `{source}` (Armature's code is at `{repo}`; its `CLAUDE.md` is the map for adding or changing a panel). When the user asks to add a panel or change how the window works, edit the code, run the tests with `MANIFEST='{source}/Cargo.toml' '{repo}/scripts/test.sh'`, and rebuild with:
+This window was built on this Mac from `{source}` (Armature's code is at `{repo}`; its `CLAUDE.md` is the map for adding or changing a panel). When the user asks to add a panel or change how the window works, edit the code, run the tests with `MANIFEST='{sh:source}/Cargo.toml' '{sh:repo}/scripts/test.sh'`, and rebuild with:
 
 ```sh
 {build}
@@ -44,7 +45,7 @@ When the new build is in place, a green restart icon (circling arrows) appears a
 const CHANGE_JA: &str = "\
 ## この窓を作り替える
 
-この窓は、この Mac で `{source}` から組んだもの(Armature のコードは `{repo}`。パネルの足し方・直し方の地図はそこの `CLAUDE.md`)。パネルを足したい・窓の動きを変えたいと頼まれたら、コードを直し、`MANIFEST='{source}/Cargo.toml' '{repo}/scripts/test.sh'` で試験を通してから、次の命令で組み直す。
+この窓は、この Mac で `{source}` から組んだもの(Armature のコードは `{repo}`。パネルの足し方・直し方の地図はそこの `CLAUDE.md`)。パネルを足したい・窓の動きを変えたいと頼まれたら、コードを直し、`MANIFEST='{sh:source}/Cargo.toml' '{sh:repo}/scripts/test.sh'` で試験を通してから、次の命令で組み直す。
 
 ```sh
 {build}
@@ -56,8 +57,8 @@ const CHANGE_JA: &str = "\
 const OWN_CRATE_EN: &str = "\nThis is plain Armature's own checkout. For changes the user wants to keep, prefer a crate of their own that depends on it (`CLAUDE.md`, \"Your own crate\"): their code stays out of Armature's repository and updating Armature stays a `git pull`.\n";
 const OWN_CRATE_JA: &str = "\nこれは素の Armature の checkout。利用者が持ち続けたい変更なら、これに依存する利用者自身の crate を作るほうを勧める(`CLAUDE.md` の「Your own crate」)——利用者のコードが Armature のリポに混ざらず、Armature の更新は `git pull` のまま済む。\n";
 
-const COPY_EN: &str = " This window runs from `{running}`, not from where the build lands (`{built}`): after building, copy it over with `ditto '{built}' '{running}'` so the restart icon appears.";
-const COPY_JA: &str = " この窓は組んだ先(`{built}`)ではなく `{running}` から動いている。組み直したら `ditto '{built}' '{running}'` で上書きすると再起動のアイコンが出る。";
+const COPY_EN: &str = " This window runs from `{running}`, not from where the build lands (`{built}`): after building, copy it over with `ditto '{sh:built}' '{sh:running}'` so the restart icon appears.";
+const COPY_JA: &str = " この窓は組んだ先(`{built}`)ではなく `{running}` から動いている。組み直したら `ditto '{sh:built}' '{sh:running}'` で上書きすると再起動のアイコンが出る。";
 
 /// Where Armature's code lives, for a copy that was downloaded rather than built on this Mac.
 /// A fork that hands out its own signed build sets `ARMATURE_REPOSITORY` when building it.
@@ -70,26 +71,27 @@ const REPOSITORY: &str = match option_env!("ARMATURE_REPOSITORY") {
 const PREBUILT_EN: &str = "\
 ## Changing this app
 
-This copy of Armature was downloaded ready-made, so its code is not on this Mac. When the user asks to add a panel or change how the window works, clone {repo} (or their own fork of it), read its `CLAUDE.md` — the map for adding or changing a panel — and prefer a crate of the user's own that depends on it. Build with `scripts/make-app.sh`; the user then opens the app it builds instead of this one, and from there you can change and rebuild it in place.
+This copy of {name} was downloaded ready-made, so its code is not on this Mac. When the user asks to add a panel or change how the window works, clone {repo} (or their own fork of it), read its `CLAUDE.md` — the map for adding or changing a panel — and prefer a crate of the user's own that depends on it. Build with `scripts/make-app.sh`; the user then opens the app it builds instead of this one, and from there you can change and rebuild it in place.
 ";
 
 const PREBUILT_JA: &str = "\
 ## この窓を作り替える
 
-この Armature は組み上がったものをダウンロードした版で、この Mac にコードは無い。パネルを足したい・窓の動きを変えたいと頼まれたら、{repo}(または利用者のフォーク)を clone し、そこの `CLAUDE.md`(パネルの足し方・直し方の地図)を読み、それに依存する利用者自身の crate を作るほうを勧める。`scripts/make-app.sh` で組み、利用者はこの版の代わりに組んだアプリを開く。そこから先は、その窓の中で直して組み直せる。
+この {name} は組み上がったものをダウンロードした版で、この Mac にコードは無い。パネルを足したい・窓の動きを変えたいと頼まれたら、{repo}(または利用者のフォーク)を clone し、そこの `CLAUDE.md`(パネルの足し方・直し方の地図)を読み、それに依存する利用者自身の crate を作るほうを勧める。`scripts/make-app.sh` で組み、利用者はこの版の代わりに組んだアプリを開く。そこから先は、その窓の中で直して組み直せる。
 ";
 
 /// How to change a downloaded copy that carries its own source (unpacked to `{source}` on the
-/// first launch). `{name}`, `{version}`, `{source}`, `{running}` and `{repo}` are filled in;
-/// `{swap}` is step 4, from [`SWAP_EN`] or [`SWAP_ELSEWHERE_EN`].
+/// first launch). `{name}`, `{version}`, `{source}`, `{repo}`, `{app}` (where the build lands),
+/// `{package}`, `{build}` and `{test}` (the commands, from [`Recipe`]) are filled in; `{swap}` is
+/// step 4, from [`SWAP_EN`] or [`SWAP_ELSEWHERE_EN`].
 const UNPACKED_EN: &str = "\
 ## Changing this app
 
 This copy of {name} was downloaded ready-made, and it carries its own code: the source of this version ({version}) is at `{source}`. Its `CLAUDE.md` is the map for adding or changing a panel. When the user asks to add a panel or change how the window works:
 
 1. Check the tools for building: `xcode-select -p` (Xcode Command Line Tools) and `cargo` (Rust). If one is missing, tell the user what it is and ask before installing it (`xcode-select --install`; Rust from https://rustup.rs).
-2. The first build compiles every dependency: it takes several minutes and puts about 1 GB in `{source}` (more as changes pile up). Later builds only recompile what changed and take well under a minute. If `{source}/dist/{name}.app` does not exist yet, tell the user that in a sentence first, then start the build in the background right away, before reading or writing any code, so it compiles while you work: `REUSE_FROM='{running}' '{source}/scripts/make-app.sh'` (it takes tmux and the fonts from this app instead of building and downloading them). A second `make-app.sh` started while it runs says so and waits for it.
-3. Edit the code, run the tests with `'{source}/scripts/test.sh'` (it shares the build with the app; `-p armature <name>` runs only some), and build with `REUSE_FROM='{running}' '{source}/scripts/make-app.sh'`.
+2. The first build compiles every dependency: it takes several minutes and puts about 1 GB in `{source}` (more as changes pile up). Later builds only recompile what changed and take well under a minute. If `{app}` does not exist yet, tell the user that in a sentence first, then start the build in the background right away, before reading or writing any code, so it compiles while you work: `{build}` (it takes tmux and the fonts from this app instead of building and downloading them). A second `make-app.sh` started while it runs says so and waits for it.
+3. Edit the code, run the tests with `{test}` (it shares the build with the app; `-p {package} <name>` runs only some), and build with `{build}`.
 4. {swap}
 
 The folder has no Git history. If the user wants to follow updates, make it a Git checkout of {repo} at the tag `v{version}`, keeping their changes. `.armature-version` in the folder says which version it came from; if it is not {version}, tell the user before building.
@@ -101,22 +103,22 @@ const UNPACKED_JA: &str = "\
 この {name} は組み上がったものをダウンロードした版で、自分のコードを持っている。この版({version})のソースは `{source}` にあり、パネルの足し方・直し方の地図はそこの `CLAUDE.md`。パネルを足したい・窓の動きを変えたいと頼まれたら:
 
 1. 組む道具を確かめる: `xcode-select -p`(Xcode Command Line Tools)と `cargo`(Rust)。無いものがあれば、それが何かを利用者に伝え、入れてよいか聞いてから入れる(`xcode-select --install`、Rust は https://rustup.rs)。
-2. 初回の組み立ては依存を全部組むので数分かかり、`{source}` に約 1GB 置かれる(改造を重ねると増える)。2 回目からは変えたところだけで、1 分かからない。`{source}/dist/{name}.app` がまだ無ければ、まずそのことを利用者に一言伝え、コードを読み書きする前に、組み立てを裏で走らせておく(作業の間に組み上がる): `REUSE_FROM='{running}' '{source}/scripts/make-app.sh'`(tmux と字体はこのアプリから写し、組まない・取り寄せない)。これが走っている間に `make-app.sh` をもう一本起こすと、そう言って終わるのを待つ。
-3. コードを直し、`'{source}/scripts/test.sh'` で試験を通し(アプリと組み立てを分け合う。`-p armature <名前>` で一部だけ)、`REUSE_FROM='{running}' '{source}/scripts/make-app.sh'` で組む。
+2. 初回の組み立ては依存を全部組むので数分かかり、`{source}` に約 1GB 置かれる(改造を重ねると増える)。2 回目からは変えたところだけで、1 分かからない。`{app}` がまだ無ければ、まずそのことを利用者に一言伝え、コードを読み書きする前に、組み立てを裏で走らせておく(作業の間に組み上がる): `{build}`(tmux と字体はこのアプリから写し、組まない・取り寄せない)。これが走っている間に `make-app.sh` をもう一本起こすと、そう言って終わるのを待つ。
+3. コードを直し、`{test}` で試験を通し(アプリと組み立てを分け合う。`-p {package} <名前>` で一部だけ)、`{build}` で組む。
 4. {swap}
 
 このフォルダに Git の履歴は無い。利用者が更新を追いたいなら、変更を残したまま {repo} のタグ `v{version}` の Git の checkout にする。フォルダの `.armature-version` はどの版から書き出したかを示す。{version} でなければ、組む前に利用者に伝える。
 ";
 
 /// Step 4 when the running copy can be replaced where it is.
-const SWAP_EN: &str = "Put the build in place of this copy, whole (`ditto` into an existing app would keep files the new build doesn't have): `rm -rf '{target}.new' && ditto '{source}/dist/{name}.app' '{target}.new' && rm -rf '{target}' && mv '{target}.new' '{target}'`. A green restart icon (circling arrows) appears at the bottom of the right column; the user clicks it (or presses ⇧⌘R) to switch. From then on the app knows where its code is.";
-const SWAP_JA: &str = "組んだものをこの版と丸ごと入れ替える(既にあるアプリへ `ditto` すると、新しい束に無いファイルが残る): `rm -rf '{target}.new' && ditto '{source}/dist/{name}.app' '{target}.new' && rm -rf '{target}' && mv '{target}.new' '{target}'`。右の列の下に緑の再起動のアイコン(円を描く矢印)が出るので、利用者がそれ(または ⇧⌘R)を押すと切り替わる。以後のアプリは自分のコードの在り処を知っている。";
+const SWAP_EN: &str = "Put the build in place of this copy, whole (`ditto` into an existing app would keep files the new build doesn't have): `rm -rf '{sh:target}.new' && ditto '{sh:app}' '{sh:target}.new' && rm -rf '{sh:target}' && mv '{sh:target}.new' '{sh:target}'`. A green restart icon (circling arrows) appears at the bottom of the right column; the user clicks it (or presses ⇧⌘R) to switch. From then on the app knows where its code is.";
+const SWAP_JA: &str = "組んだものをこの版と丸ごと入れ替える(既にあるアプリへ `ditto` すると、新しい束に無いファイルが残る): `rm -rf '{sh:target}.new' && ditto '{sh:app}' '{sh:target}.new' && rm -rf '{sh:target}' && mv '{sh:target}.new' '{sh:target}'`。右の列の下に緑の再起動のアイコン(円を描く矢印)が出るので、利用者がそれ(または ⇧⌘R)を押すと切り替わる。以後のアプリは自分のコードの在り処を知っている。";
 
 /// Step 4 when this copy can't be replaced where it runs: from the disk image, from the
 /// read-only copy macOS runs a quarantined app from (App Translocation), or from a folder this
 /// user can't write to. The build goes to Applications instead.
-const SWAP_ELSEWHERE_EN: &str = "This copy runs from `{running}`, which cannot be replaced (a disk image, a read-only copy macOS made because the app was not moved to Applications, or a folder this user can't write to). Put the build at `{target}` instead; if something is already there, ask the user before replacing it: `rm -rf '{target}.new' && ditto '{source}/dist/{name}.app' '{target}.new' && rm -rf '{target}' && mv '{target}.new' '{target}'`. No restart icon appears: tell the user the new {name} is at `{target}`, and that they quit this one (⌘Q; their Claude sessions keep running) and open that one from then on. From then on the app knows where its code is.";
-const SWAP_ELSEWHERE_JA: &str = "この版は `{running}` から動いていて、そこは置き換えられない(ディスクイメージの中か、アプリを Applications に移さずに開いたので macOS が作った読み取り専用の写しか、この利用者には書けないフォルダ)。代わりに `{target}` へ置く。そこに既に何かあれば、置き換える前に利用者に聞く: `rm -rf '{target}.new' && ditto '{source}/dist/{name}.app' '{target}.new' && rm -rf '{target}' && mv '{target}.new' '{target}'`。再起動のアイコンは出ない。新しい {name} が `{target}` にあること、この版を終了して(⌘Q。Claude のセッションは走り続ける)以後はそちらを開くことを利用者に伝える。以後のアプリは自分のコードの在り処を知っている。";
+const SWAP_ELSEWHERE_EN: &str = "This copy runs from `{running}`, which cannot be replaced (a disk image, a read-only copy macOS made because the app was not moved to Applications, or a folder this user can't write to). Put the build at `{target}` instead; if something is already there, ask the user before replacing it: `rm -rf '{sh:target}.new' && ditto '{sh:app}' '{sh:target}.new' && rm -rf '{sh:target}' && mv '{sh:target}.new' '{sh:target}'`. No restart icon appears: tell the user the new {name} is at `{target}`, and that they quit this one (⌘Q; their Claude sessions keep running) and open that one from then on. From then on the app knows where its code is.";
+const SWAP_ELSEWHERE_JA: &str = "この版は `{running}` から動いていて、そこは置き換えられない(ディスクイメージの中か、アプリを Applications に移さずに開いたので macOS が作った読み取り専用の写しか、この利用者には書けないフォルダ)。代わりに `{target}` へ置く。そこに既に何かあれば、置き換える前に利用者に聞く: `rm -rf '{sh:target}.new' && ditto '{sh:app}' '{sh:target}.new' && rm -rf '{sh:target}' && mv '{sh:target}.new' '{sh:target}'`。再起動のアイコンは出ない。新しい {name} が `{target}` にあること、この版を終了して(⌘Q。Claude のセッションは走り続ける)以後はそちらを開くことを利用者に伝える。以後のアプリは自分のコードの在り処を知っている。";
 
 /// This app's version (the source a downloaded copy carries is of this version).
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -169,21 +171,154 @@ pub fn unpack_source() {
     let _ = std::fs::remove_dir_all(&partial);
 }
 
+/// How a signed build was made (`Resources/build.env`, written by `scripts/make-app.sh`), so the
+/// source it carries is rebuilt into the same app: a renamed build, or a crate of the user's in
+/// the same repository. Missing lines keep `make-app.sh`'s own defaults.
+#[derive(Debug, PartialEq, Eq)]
+struct Recipe {
+    /// The manifest, relative to the source folder.
+    manifest: String,
+    package: String,
+    binary_name: String,
+    app_name: String,
+    bundle_id: String,
+    /// The icon, relative to the source folder, when it lives there.
+    icon: Option<String>,
+}
+
+impl Default for Recipe {
+    fn default() -> Self {
+        Self {
+            manifest: "rust/Cargo.toml".into(),
+            package: "armature".into(),
+            binary_name: "armature".into(),
+            app_name: "Armature".into(),
+            bundle_id: "blog.tobari.armature".into(),
+            icon: None,
+        }
+    }
+}
+
+impl Recipe {
+    fn parse(text: &str) -> Self {
+        let mut recipe = Self::default();
+        for (key, value) in text.lines().filter_map(|line| line.split_once('=')) {
+            let value = value.to_string();
+            match key {
+                "MANIFEST" => recipe.manifest = value,
+                "PACKAGE" => recipe.package = value,
+                "BINARY_NAME" => recipe.binary_name = value,
+                "APP_NAME" => recipe.app_name = value,
+                "BUNDLE_ID" => recipe.bundle_id = value,
+                "ICON" => recipe.icon = Some(value),
+                _ => {}
+            }
+        }
+        recipe
+    }
+
+    /// What this bundle says, or plain Armature's.
+    fn of_this_app() -> Self {
+        std::env::current_exe()
+            .ok()
+            .and_then(|exe| Some(exe.parent()?.parent()?.join("Resources/build.env")))
+            .and_then(|path| std::fs::read_to_string(path).ok())
+            .map_or_else(Self::default, |text| Self::parse(&text))
+    }
+
+    /// The settings `make-app.sh` needs besides its defaults, as `KEY='value' ` words.
+    fn settings(&self, source: &Path, with_manifest_only: bool) -> String {
+        let plain = Self::default();
+        let mut words = String::new();
+        let mut set = |key: &str, value: &str| {
+            words.push_str(&format!("{key}={} ", quote(value)));
+        };
+        if self.manifest != plain.manifest {
+            set("MANIFEST", &source.join(&self.manifest).to_string_lossy());
+        }
+        if with_manifest_only {
+            return words;
+        }
+        for (key, value, default) in [
+            ("PACKAGE", &self.package, &plain.package),
+            ("BINARY_NAME", &self.binary_name, &plain.binary_name),
+            ("APP_NAME", &self.app_name, &plain.app_name),
+            ("BUNDLE_ID", &self.bundle_id, &plain.bundle_id),
+        ] {
+            if value != default {
+                set(key, value);
+            }
+        }
+        if let Some(icon) = &self.icon {
+            set("ICON", &source.join(icon).to_string_lossy());
+        }
+        words
+    }
+
+    /// The command that rebuilds this app from its unpacked source.
+    fn build(&self, source: &Path, running: &Path) -> String {
+        format!(
+            "REUSE_FROM={} {}{}",
+            quote(&running.to_string_lossy()),
+            self.settings(source, false),
+            quote(&source.join("scripts/make-app.sh").to_string_lossy())
+        )
+    }
+
+    /// The command that runs the tests of the unpacked source.
+    fn test(&self, source: &Path) -> String {
+        format!(
+            "{}{}",
+            self.settings(source, true),
+            quote(&source.join("scripts/test.sh").to_string_lossy())
+        )
+    }
+
+    /// Where the rebuilt app lands.
+    fn built(&self, source: &Path) -> PathBuf {
+        source.join("dist").join(format!("{}.app", self.app_name))
+    }
+}
+
+/// `value` as one shell word.
+fn quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', r"'\''"))
+}
+
+/// Fills `{key}` with `value`, and `{sh:key}` — written between a shell's single quotes — with
+/// `value` escaped for them, so a path or a name with `'` in it still makes a working command.
+fn fill(text: &str, key: &str, value: &str) -> String {
+    text.replace(&format!("{{sh:{key}}}"), &value.replace('\'', r"'\''"))
+        .replace(&format!("{{{key}}}"), value)
+}
+
 fn unpacked_part(running: &Path) -> String {
-    let target = swap_target(running, &|dir| writable(dir), &home());
+    unpacked_part_with(running, &Recipe::of_this_app(), &unpacked_source_dir())
+}
+
+fn unpacked_part_with(running: &Path, recipe: &Recipe, source: &Path) -> String {
+    let target = swap_target(running, &recipe.app_name, &|dir| writable(dir), &home());
     let swap = if target == running {
         tr!(SWAP_EN, SWAP_JA)
     } else {
         tr!(SWAP_ELSEWHERE_EN, SWAP_ELSEWHERE_JA)
     };
-    tr!(UNPACKED_EN, UNPACKED_JA)
+    let text = tr!(UNPACKED_EN, UNPACKED_JA)
         .replace("{swap}", swap)
-        .replace("{target}", &target.to_string_lossy())
-        .replace("{name}", armature_core::paths::name())
-        .replace("{version}", VERSION)
-        .replace("{source}", &unpacked_source_dir().to_string_lossy())
-        .replace("{running}", &running.to_string_lossy())
-        .replace("{repo}", REPOSITORY)
+        .replace("{build}", &recipe.build(source, running))
+        .replace("{test}", &recipe.test(source));
+    [
+        ("target", target.to_string_lossy().to_string()),
+        ("app", recipe.built(source).to_string_lossy().to_string()),
+        ("package", recipe.package.clone()),
+        ("name", armature_core::paths::name().to_string()),
+        ("version", VERSION.to_string()),
+        ("source", source.to_string_lossy().to_string()),
+        ("running", running.to_string_lossy().to_string()),
+        ("repo", REPOSITORY.to_string()),
+    ]
+    .iter()
+    .fold(text, |text, (key, value)| fill(&text, key, value))
 }
 
 fn home() -> PathBuf {
@@ -206,13 +341,18 @@ fn translocated(running: &Path) -> bool {
 }
 
 /// Where a build goes in place of this copy: the running app when its folder can be written
-/// (and it isn't translocated), otherwise `/Applications/<name>.app`, or
-/// `~/Applications/<name>.app` when Applications can't be written.
-fn swap_target(running: &Path, writable: &dyn Fn(&Path) -> bool, home: &Path) -> PathBuf {
+/// (and it isn't translocated), otherwise `/Applications/<app name>.app`, or
+/// `~/Applications/<app name>.app` when Applications can't be written.
+fn swap_target(
+    running: &Path,
+    app_name: &str,
+    writable: &dyn Fn(&Path) -> bool,
+    home: &Path,
+) -> PathBuf {
     if !translocated(running) && running.parent().is_some_and(writable) {
         return running.to_path_buf();
     }
-    let app = format!("{}.app", armature_core::paths::name());
+    let app = format!("{app_name}.app");
     let applications = Path::new("/Applications");
     if writable(applications) {
         applications.join(app)
@@ -257,9 +397,8 @@ fn change_part(fields: &std::collections::HashMap<String, String>, running: &std
     let copy = if built.is_empty() || built == running {
         String::new()
     } else {
-        tr!(COPY_EN, COPY_JA)
-            .replace("{built}", built)
-            .replace("{running}", &running)
+        let copy = fill(tr!(COPY_EN, COPY_JA), "built", built);
+        fill(&copy, "running", &running)
     };
     // The checkout of Armature itself (its workspace is `<repo>/rust`), not a crate of the user's.
     let own_crate = if std::path::Path::new(source).starts_with(repo) {
@@ -267,14 +406,12 @@ fn change_part(fields: &std::collections::HashMap<String, String>, running: &std
     } else {
         String::new()
     };
-    Some(
-        tr!(CHANGE_EN, CHANGE_JA)
-            .replace("{source}", source)
-            .replace("{repo}", repo)
-            .replace("{build}", build)
-            .replace("{own_crate}", &own_crate)
-            .replace("{copy}", &copy),
-    )
+    // `build` is already a command (make-app.sh quoted it).
+    let text = tr!(CHANGE_EN, CHANGE_JA)
+        .replace("{build}", build)
+        .replace("{own_crate}", &own_crate)
+        .replace("{copy}", &copy);
+    Some(fill(&fill(&text, "source", source), "repo", repo))
 }
 
 /// Where the notes are written.
@@ -300,7 +437,11 @@ pub fn write(panel_notes: &[String]) {
         // repository.
         None if in_bundle() => match (bundled_source(), running_bundle()) {
             (Some(_), Some(running)) => Some(unpacked_part(&running)),
-            _ => Some(tr!(PREBUILT_EN, PREBUILT_JA).replace("{repo}", REPOSITORY)),
+            _ => Some(
+                tr!(PREBUILT_EN, PREBUILT_JA)
+                    .replace("{repo}", REPOSITORY)
+                    .replace("{name}", armature_core::paths::name()),
+            ),
         },
         None => None,
     };
@@ -366,7 +507,7 @@ mod tests {
     #[test]
     fn a_downloaded_copy_points_claude_at_the_repository() {
         for text in [PREBUILT_EN, PREBUILT_JA] {
-            let text = text.replace("{repo}", REPOSITORY);
+            let text = text.replace("{repo}", REPOSITORY).replace("{name}", "Armature");
             assert!(text.contains("https://github.com/ttobari/armature"));
             assert!(text.contains("CLAUDE.md"));
             assert!(!text.contains("/Users/"), "no paths from the Mac it was built on");
@@ -376,20 +517,19 @@ mod tests {
     #[test]
     fn a_downloaded_copy_with_its_source_says_where_it_is_and_how_to_swap_the_build_in() {
         for text in [UNPACKED_EN, UNPACKED_JA] {
-            for key in ["{name}", "{version}", "{source}", "{running}", "{repo}", "{swap}"] {
+            for key in ["{name}", "{version}", "{source}", "{repo}", "{swap}", "{build}", "{test}", "{app}", "{package}"] {
                 assert!(text.contains(key), "{key} is not used");
             }
             assert!(text.contains("xcode-select --install") && text.contains("rustup.rs"));
             assert!(text.contains("make-app.sh"));
-            assert!(text.contains("REUSE_FROM='{running}'") && text.contains("scripts/test.sh"));
             // Before the first build, the user hears what it costs.
-            assert!(text.contains("{source}/dist/{name}.app"));
+            assert!(text.contains("If `{app}` does not exist") || text.contains("`{app}` がまだ無ければ"));
             assert!(text.contains("1 GB") || text.contains("1GB"));
         }
         for text in [SWAP_EN, SWAP_JA, SWAP_ELSEWHERE_EN, SWAP_ELSEWHERE_JA] {
             // Replaced whole: nothing of the old app is left in the new one.
             assert!(text.contains(
-                "rm -rf '{target}.new' && ditto '{source}/dist/{name}.app' '{target}.new' && rm -rf '{target}' && mv '{target}.new' '{target}'"
+                "rm -rf '{sh:target}.new' && ditto '{sh:app}' '{sh:target}.new' && rm -rf '{sh:target}' && mv '{sh:target}.new' '{sh:target}'"
             ));
         }
         for text in [SWAP_ELSEWHERE_EN, SWAP_ELSEWHERE_JA] {
@@ -400,6 +540,17 @@ mod tests {
         let text = unpacked_part(Path::new("/Applications/Armature.app"));
         assert!(text.contains(&format!("v{VERSION}")));
         assert!(!text.contains('{'), "every placeholder is filled: {text}");
+        // Plain Armature: the same short commands as before build.env.
+        let text = unpacked_part_with(
+            Path::new("/Applications/Armature.app"),
+            &Recipe::default(),
+            Path::new("/Users/me/Armature/source"),
+        );
+        assert!(text.contains(
+            "`REUSE_FROM='/Applications/Armature.app' '/Users/me/Armature/source/scripts/make-app.sh'`"
+        ));
+        assert!(text.contains("`'/Users/me/Armature/source/scripts/test.sh'`"));
+        assert!(text.contains("`/Users/me/Armature/source/dist/Armature.app`"));
     }
 
     #[test]
@@ -409,16 +560,16 @@ mod tests {
         let none = |_: &Path| false;
         let not_volumes = |dir: &Path| !dir.starts_with("/Volumes");
         let installed = Path::new("/Applications/Armature.app");
-        assert_eq!(swap_target(installed, &all, home), installed, "in place");
+        assert_eq!(swap_target(installed, "Armature", &all, home), installed, "in place");
         let dmg = Path::new("/Volumes/Armature/Armature.app");
-        assert_eq!(swap_target(dmg, &not_volumes, home), installed);
+        assert_eq!(swap_target(dmg, "Armature", &not_volumes, home), installed);
         let moved = Path::new(
             "/private/var/folders/ab/xyz/T/AppTranslocation/0F1E-2D3C/d/Armature.app",
         );
-        assert_eq!(swap_target(moved, &all, home), installed, "translocated, even if it looks writable");
+        assert_eq!(swap_target(moved, "Armature", &all, home), installed, "translocated, even if it looks writable");
         assert!(translocated(moved) && !translocated(installed));
         assert_eq!(
-            swap_target(dmg, &none, home),
+            swap_target(dmg, "Armature", &none, home),
             Path::new("/Users/me/Applications/Armature.app"),
             "Applications can't be written: the user's own"
         );
@@ -427,6 +578,111 @@ mod tests {
         assert!(text.contains("cannot be replaced"), "{text}");
         assert!(!text.contains("'/nonexistent-volume/Armature.app.new'"), "not copied onto itself: {text}");
         assert!(!text.contains('{'), "every placeholder is filled: {text}");
+    }
+
+    /// The words `sh` makes of `command` (`set --` them and print one per line).
+    fn shell_words(command: &str) -> Vec<String> {
+        let out = std::process::Command::new("/bin/sh")
+            .arg("-c")
+            .arg(format!("set -- {command}; printf '%s\\n' \"$@\""))
+            .output()
+            .unwrap();
+        String::from_utf8(out.stdout).unwrap().lines().map(ToString::to_string).collect()
+    }
+
+    /// The first command in backquotes after `after`.
+    fn command_after<'a>(text: &'a str, after: &str) -> &'a str {
+        let rest = &text[text.find(after).unwrap() + after.len()..];
+        let start = rest.find('`').unwrap() + 1;
+        let end = start + rest[start..].find('`').unwrap();
+        &rest[start..end]
+    }
+
+    #[test]
+    fn a_quote_in_a_path_or_a_name_still_makes_working_commands() {
+        let _en = armature_core::lang::scoped(armature_core::lang::Lang::En);
+        let recipe = Recipe {
+            app_name: "Bob's Armature".into(),
+            ..Recipe::default()
+        };
+        let source = Path::new("/Users/o'neil/Armature/source");
+        // A writable folder, so the build is swapped in where it runs.
+        let running = std::env::temp_dir().join("Bob's Armature.app");
+        let text = unpacked_part_with(&running, &recipe, source);
+        assert_eq!(
+            shell_words(command_after(&text, "compiles while you work: ")),
+            [
+                format!("REUSE_FROM={}", running.display()).as_str(),
+                "APP_NAME=Bob's Armature",
+                "/Users/o'neil/Armature/source/scripts/make-app.sh",
+            ]
+        );
+        assert_eq!(
+            shell_words(command_after(&text, "run the tests with ")),
+            ["/Users/o'neil/Armature/source/scripts/test.sh"]
+        );
+        // `rm -rf 'X.new' && ditto 'A' 'X.new' && …`: the words of the ditto.
+        let swap = command_after(&text, "keep files the new build doesn't have): ");
+        let ditto = swap.split(" && ").nth(1).unwrap();
+        assert_eq!(
+            shell_words(ditto),
+            [
+                "ditto",
+                "/Users/o'neil/Armature/source/dist/Bob's Armature.app",
+                format!("{}.new", running.display()).as_str(),
+            ]
+        );
+        // A local build: the test command and the copy.
+        let built = fields(&[
+            ("source", "/Users/o'neil/armature/rust"),
+            ("repo", "/Users/o'neil/armature"),
+            ("app", "/Users/o'neil/armature/dist/Armature.app"),
+            ("build", "make"),
+        ]);
+        let text = change_part(&built, Path::new("/Applications/Armature.app")).unwrap();
+        assert_eq!(
+            shell_words(command_after(&text, "run the tests with ")),
+            ["MANIFEST=/Users/o'neil/armature/rust/Cargo.toml", "/Users/o'neil/armature/scripts/test.sh"]
+        );
+        assert_eq!(
+            shell_words(command_after(&text, "copy it over with ")),
+            ["ditto", "/Users/o'neil/armature/dist/Armature.app", "/Applications/Armature.app"]
+        );
+    }
+
+    #[test]
+    fn a_renamed_build_or_a_crate_of_its_own_is_rebuilt_into_the_same_app() {
+        let recipe = Recipe::parse(
+            "MANIFEST=crates/workbench/Cargo.toml\nPACKAGE=workbench\nBINARY_NAME=workbench\nAPP_NAME=Workbench\nBUNDLE_ID=com.example.workbench\nICON=crates/workbench/icon.png\n",
+        );
+        let source = Path::new("/Users/me/Workbench/source");
+        assert_eq!(
+            shell_words(&recipe.build(source, Path::new("/Applications/Workbench.app"))),
+            [
+                "REUSE_FROM=/Applications/Workbench.app",
+                "MANIFEST=/Users/me/Workbench/source/crates/workbench/Cargo.toml",
+                "PACKAGE=workbench",
+                "BINARY_NAME=workbench",
+                "APP_NAME=Workbench",
+                "BUNDLE_ID=com.example.workbench",
+                "ICON=/Users/me/Workbench/source/crates/workbench/icon.png",
+                "/Users/me/Workbench/source/scripts/make-app.sh",
+            ]
+        );
+        assert_eq!(
+            shell_words(&recipe.test(source)),
+            [
+                "MANIFEST=/Users/me/Workbench/source/crates/workbench/Cargo.toml",
+                "/Users/me/Workbench/source/scripts/test.sh",
+            ]
+        );
+        assert_eq!(recipe.built(source), Path::new("/Users/me/Workbench/source/dist/Workbench.app"));
+        let home = Path::new("/Users/me");
+        assert_eq!(
+            swap_target(Path::new("/Volumes/W/Workbench.app"), &recipe.app_name, &|dir: &Path| dir == Path::new("/Applications"), home),
+            Path::new("/Applications/Workbench.app")
+        );
+        assert_eq!(Recipe::parse(""), Recipe::default(), "a bundle without build.env is plain Armature");
     }
 
     #[test]

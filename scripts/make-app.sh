@@ -236,7 +236,29 @@ if [ "$SIGN_ID" = "-" ]; then
 else
     # 配布用の束は、その版のソースを丸ごと持つ(初回に ~/Armature/source へ書き出す・
     # `src/notes.rs`)。中身は組んだ木と同じ(コミットしていない変更は冒頭で止めてある)。
-    git -C "$ROOT" archive --format=tar.gz HEAD > "$STAGE/Contents/Resources/source.tar.gz"
+    # 同じ束に組み直せるように、組んだ設定を build.env に残す(パスはソースの中からの相対)。
+    # 利用者の crate がこのリポの外にあると、同梱するソースからは同じ束に組めないので入れない
+    # (約束の文はリポを指す)。
+    MANIFEST_ABS="$(cd "$(dirname "$MANIFEST")" && pwd)/$(basename "$MANIFEST")"
+    case "$MANIFEST_ABS" in
+        "$ROOT"/*)
+            git -C "$ROOT" archive --format=tar.gz HEAD > "$STAGE/Contents/Resources/source.tar.gz"
+            {
+                printf 'MANIFEST=%s\n' "${MANIFEST_ABS#"$ROOT"/}"
+                printf 'PACKAGE=%s\nBINARY_NAME=%s\nAPP_NAME=%s\nBUNDLE_ID=%s\n' \
+                    "$PACKAGE" "$BINARY_NAME" "$APP_NAME" "$BUNDLE_ID"
+                ICON_ABS="$(cd "$(dirname "$ICON")" && pwd)/$(basename "$ICON")"
+                case "$ICON_ABS" in
+                    "$ROOT/rust/crates/armature/assets/Cockpit.icon") ;;
+                    "$ROOT"/*) printf 'ICON=%s\n' "${ICON_ABS#"$ROOT"/}" ;;
+                    *) echo "ICON が $ROOT の外: 同梱のソースから組み直すと既定のアイコンになる" >&2 ;;
+                esac
+            } > "$STAGE/Contents/Resources/build.env"
+            ;;
+        *)
+            echo "MANIFEST が $ROOT の外: 配布用の束にソースを入れない(約束の文はリポを指す)" >&2
+            ;;
+    esac
 fi
 
 # 7c. 束の中の Mach-O が、最低 OS(15.0)に無い C の関数を弱リンクで呼んでいないこと。

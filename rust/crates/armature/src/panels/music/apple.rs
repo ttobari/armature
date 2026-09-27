@@ -259,7 +259,12 @@ mod tests {
     }
 
     /// Music が起きていない機体でも、読むだけなら通る(この機体の実測)。
+    ///
+    /// 本物の Music へ osascript で訊くので、既定では走らせない。画面のセッションが無い
+    /// 機体(ssh で入った VM)では Apple Events の応答を 2 分待って試験全体が止まる。
+    /// Mac の前で `scripts/test.sh -p armature -- --ignored reading_without_music` で走らせる。
     #[test]
+    #[ignore = "talks to the real Music.app"]
     fn reading_without_music_running_is_safe() {
         let now = snapshot();
         if now.state == State::Off {

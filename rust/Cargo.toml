@@ -3,8 +3,8 @@
 [workspace]
 resolver = "3"
 members = ["crates/armature-core", "crates/armature"]
-# vendor は差し替えた複製(iced_term)で、ワークスペースの一員ではない。
-exclude = ["vendor"]
+# crates/armature/vendor/iced_term(差し替えた複製)は path 依存でこの下にあるので、ワークスペースの一員になる
+# (`cargo test --workspace` はその試験も走らせる)。
 # Cargo.lock は idna_adapter を 1.1.0 に止めてある(`cargo update -p idna_adapter --precise 1.1.0`)。
 # wry が引く url の国際化ドメイン名(IDNA)を ICU4X でなく unicode-rs で処理させ、ICU4X の 20 余りの
 # crate を組まずに済ませる(idna_adapter の README の選び方)。依存として書くと Armature を依存に取る
